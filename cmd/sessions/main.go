@@ -11,11 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"claude-code-session-reader/internal/analyzer"
-	"claude-code-session-reader/internal/formatter"
-	"claude-code-session-reader/internal/jsonutil"
-	"claude-code-session-reader/internal/parser"
-	"claude-code-session-reader/internal/tokens"
+	"cc-session-reader/internal/analyzer"
+	"cc-session-reader/internal/claudecodec"
+	"cc-session-reader/internal/formatter"
+	"cc-session-reader/internal/parser"
+	"cc-session-reader/internal/session"
+	"cc-session-reader/internal/tokens"
 )
 
 func main() {
@@ -49,15 +50,24 @@ func printUsage() {
 }
 
 func cmdList(args []string) {
-	fs := flag.NewFlagSet("list", flag.ExitOnError)
+	if err := runList(args, os.Stdout, os.Stderr, parser.DefaultStore()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func runList(args []string, out io.Writer, errOut io.Writer, store parser.Store) error {
+	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	fs.SetOutput(errOut)
 	limit := fs.Int("n", 20, "max sessions to display")
 	project := fs.String("p", "", "filter by project name (case-insensitive)")
-	_ = fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 
-	metaFiles, err := parser.ListSessionMetaFiles()
+	metaFiles, err := store.ListSessionMetaFiles()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error listing sessions: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("list sessions: %w", err)
 	}
 
 	projectFilter := ""
@@ -73,119 +83,153 @@ func cmdList(args []string) {
 
 		data, err := os.ReadFile(mf.Path)
 		if err != nil {
+			fmt.Fprintf(errOut, "warning: skipping unreadable metadata %s: %v\n", mf.Path, err)
 			continue
 		}
-		var meta map[string]interface{}
+		var meta listSessionMeta
 		if err := json.Unmarshal(data, &meta); err != nil {
+			fmt.Fprintf(errOut, "warning: skipping invalid metadata %s: %v\n", mf.Path, err)
 			continue
 		}
 
-		projectPath := jsonutil.GetStr(meta, "project_path")
 		projectName := "?"
-		if projectPath != "" {
-			projectName = filepath.Base(projectPath)
+		if meta.ProjectPath != "" {
+			projectName = filepath.Base(meta.ProjectPath)
 		}
 
 		if projectFilter != "" && !strings.Contains(strings.ToLower(projectName), projectFilter) {
 			continue
 		}
 
-		sid := jsonutil.GetStr(meta, "session_id")
+		sid := meta.SessionID
 		if sid == "" {
 			sid = strings.TrimSuffix(filepath.Base(mf.Path), ".json")
 		}
-		startTime := jsonutil.GetStr(meta, "start_time")
-		duration := jsonutil.GetNum(meta, "duration_minutes")
-		userMsgs := jsonutil.GetNum(meta, "user_message_count")
-		asstMsgs := jsonutil.GetNum(meta, "assistant_message_count")
-		firstPrompt := jsonutil.GetStr(meta, "first_prompt")
+		firstPrompt := meta.FirstPrompt
 		runes := []rune(firstPrompt)
 		if len(runes) > 80 {
 			firstPrompt = string(runes[:77]) + "..."
 		}
 
 		dateStr := "??-??"
-		if startTime != "" {
-			dateStr = parser.FormatTimestamp(startTime)
+		if meta.StartTime != "" {
+			dateStr = parser.FormatTimestamp(meta.StartTime)
 		}
 
-		fmt.Printf("%s  %s  %-20s  %3dm  u:%d a:%d  %s\n",
-			sid, dateStr, projectName, duration, userMsgs, asstMsgs, firstPrompt)
+		fmt.Fprintf(out, "%s  %s  %-20s  %3dm  u:%d a:%d  %s\n",
+			sid, dateStr, projectName, meta.DurationMinutes, meta.UserMessageCount, meta.AssistantMessageCount, firstPrompt)
 		printed++
 	}
 
 	if printed == 0 {
-		fmt.Fprintln(os.Stderr, "No sessions found.")
+		fmt.Fprintln(errOut, "No sessions found.")
 	}
+	return nil
+}
+
+type listSessionMeta struct {
+	SessionID             string `json:"session_id"`
+	ProjectPath           string `json:"project_path"`
+	StartTime             string `json:"start_time"`
+	DurationMinutes       int    `json:"duration_minutes"`
+	UserMessageCount      int    `json:"user_message_count"`
+	AssistantMessageCount int    `json:"assistant_message_count"`
+	FirstPrompt           string `json:"first_prompt"`
 }
 
 func cmdRead(args []string) {
-	fs := flag.NewFlagSet("read", flag.ExitOnError)
-	maxLines := fs.Int("max-lines", 0, "max output lines (0=unlimited)")
-	isVerboseAgents := fs.Bool("verbose-agents", false, "show full agent results")
-	_ = fs.Parse(reorderArgs(args))
-
-	sessionID := resolveSessionArg(fs)
-	transcriptPath := findTranscriptOrExit(sessionID)
-
-	if err := formatter.FormatRead(transcriptPath, sessionID, *maxLines, *isVerboseAgents, os.Stdout); err != nil {
+	if err := runRead(args, os.Stdout, os.Stderr, parser.DefaultStore()); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func runRead(args []string, out io.Writer, errOut io.Writer, store parser.Store) error {
+	fs := flag.NewFlagSet("read", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	maxLines := fs.Int("max-lines", 0, "max output lines (0=unlimited)")
+	isVerboseAgents := fs.Bool("verbose-agents", false, "show full agent results")
+	if err := fs.Parse(reorderArgs(args)); err != nil {
+		return err
+	}
+
+	resolved, err := resolveSession(fs, store)
+	if err != nil {
+		return err
+	}
+
+	return formatter.FormatRead(resolved.Path, *maxLines, *isVerboseAgents, out)
 }
 
 func cmdContext(args []string) {
-	fs := flag.NewFlagSet("context", flag.ExitOnError)
-	isVerboseAgents := fs.Bool("verbose-agents", false, "show full agent results")
-	_ = fs.Parse(reorderArgs(args))
-
-	sessionID := resolveSessionArg(fs)
-	transcriptPath := findTranscriptOrExit(sessionID)
-
-	if err := formatter.FormatContext(transcriptPath, sessionID, *isVerboseAgents, os.Stdout); err != nil {
+	if err := runContext(args, os.Stdout, os.Stderr, parser.DefaultStore()); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func cmdStats(args []string) {
-	fs := flag.NewFlagSet("stats", flag.ExitOnError)
-	isNoTokens := fs.Bool("no-tokens", false, "skip token counting")
-	_ = fs.Parse(reorderArgs(args))
+func runContext(args []string, out io.Writer, errOut io.Writer, store parser.Store) error {
+	fs := flag.NewFlagSet("context", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	isVerboseAgents := fs.Bool("verbose-agents", false, "show full agent results")
+	if err := fs.Parse(reorderArgs(args)); err != nil {
+		return err
+	}
 
-	sessionID := resolveSessionArg(fs)
-	transcriptPath := findTranscriptOrExit(sessionID)
-
-	entries, err := parser.ParseTranscript(transcriptPath)
+	resolved, err := resolveSession(fs, store)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing transcript: %v\n", err)
+		return err
+	}
+
+	return formatter.FormatContextWithStore(resolved.Path, resolved.ID, *isVerboseAgents, out, store)
+}
+
+func cmdStats(args []string) {
+	if err := runStats(args, os.Stdout, os.Stderr, parser.DefaultStore()); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
 
-	result := analyzer.ComputeStats(entries)
-
-	shortID := sessionID
-	if len(shortID) > 8 {
-		shortID = shortID[:8]
+func runStats(args []string, out io.Writer, errOut io.Writer, store parser.Store) error {
+	fs := flag.NewFlagSet("stats", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	isNoTokens := fs.Bool("no-tokens", false, "skip token counting")
+	if err := fs.Parse(reorderArgs(args)); err != nil {
+		return err
 	}
-	info, _ := os.Stat(transcriptPath)
+
+	resolved, err := resolveSession(fs, store)
+	if err != nil {
+		return err
+	}
+
+	events, err := claudecodec.ReadAll(resolved.Path)
+	if err != nil {
+		return fmt.Errorf("parsing transcript: %w", err)
+	}
+
+	result := analyzer.ComputeStats(events)
+
+	shortID := session.ShortID(resolved.ID, 8)
+	info, _ := os.Stat(resolved.Path)
 	fileSize := float64(0)
 	if info != nil {
 		fileSize = float64(info.Size()) / 1024.0
 	}
 
-	fmt.Printf("Session: %s\n", shortID)
-	fmt.Printf("Transcript: %.1fKB\n\n", fileSize)
-	fmt.Println("=== Characters ===")
-	fmt.Printf("  Raw:      %10s\n", formatNumber(result.RawChars))
-	fmt.Printf("  Filtered: %10s\n", formatNumber(result.FilteredChars))
+	fmt.Fprintf(out, "Session: %s\n", shortID)
+	fmt.Fprintf(out, "Transcript: %.1fKB\n\n", fileSize)
+	fmt.Fprintln(out, "=== Characters ===")
+	fmt.Fprintf(out, "  Raw:      %10s\n", formatNumber(result.RawChars))
+	fmt.Fprintf(out, "  Filtered: %10s\n", formatNumber(result.FilteredChars))
 	if result.RawChars > 0 {
 		saved := result.RawChars - result.FilteredChars
 		pct := float64(saved) * 100.0 / float64(result.RawChars)
-		fmt.Printf("  Saved:    %10s (%.1f%%)\n", formatNumber(saved), pct)
+		fmt.Fprintf(out, "  Saved:    %10s (%.1f%%)\n", formatNumber(saved), pct)
 	}
 
-	fmt.Println("\n=== Breakdown ===")
+	fmt.Fprintln(out, "\n=== Breakdown ===")
 	for _, bl := range []struct{ label, key string }{
 		{"KEPT  user text:        ", "user_text"},
 		{"KEPT  user answers:     ", "user_answers"},
@@ -195,47 +239,48 @@ func cmdStats(args []string) {
 		{"CUT   tool result (raw):", "tool_result_raw"},
 		{"CUT   system/noise:     ", "system_noise"},
 	} {
-		fmt.Printf("  %s %10s\n", bl.label, formatNumber(result.Categories[bl.key]))
+		fmt.Fprintf(out, "  %s %10s\n", bl.label, formatNumber(result.Categories[bl.key]))
 	}
 
 	if *isNoTokens {
-		return
+		return nil
 	}
 
-	fmt.Println()
+	fmt.Fprintln(out)
 	rawAPI, errRaw := tokens.CountTokensAPI(result.RawText)
 	filtAPI, errFilt := tokens.CountTokensAPI(result.FilteredText)
 	if errRaw == nil && errFilt == nil {
 		saved := rawAPI - filtAPI
-		fmt.Println("=== Tokens (Anthropic API) ===")
-		fmt.Printf("  Raw:      %10s\n", formatNumber(rawAPI))
-		fmt.Printf("  Filtered: %10s\n", formatNumber(filtAPI))
+		fmt.Fprintln(out, "=== Tokens (Anthropic API) ===")
+		fmt.Fprintf(out, "  Raw:      %10s\n", formatNumber(rawAPI))
+		fmt.Fprintf(out, "  Filtered: %10s\n", formatNumber(filtAPI))
 		if rawAPI > 0 {
 			pct := float64(saved) * 100.0 / float64(rawAPI)
-			fmt.Printf("  Saved:    %10s (%.1f%%)\n", formatNumber(saved), pct)
+			fmt.Fprintf(out, "  Saved:    %10s (%.1f%%)\n", formatNumber(saved), pct)
 		}
 	} else {
 		rawEst := tokens.EstimateTokens(result.RawText)
 		filtEst := tokens.EstimateTokens(result.FilteredText)
 		savedEst := rawEst - filtEst
-		fmt.Println("=== Tokens (estimated) ===")
-		fmt.Printf("  Raw:      %10s ~\n", formatNumber(rawEst))
-		fmt.Printf("  Filtered: %10s ~\n", formatNumber(filtEst))
+		fmt.Fprintln(out, "=== Tokens (estimated) ===")
+		fmt.Fprintf(out, "  Raw:      %10s ~\n", formatNumber(rawEst))
+		fmt.Fprintf(out, "  Filtered: %10s ~\n", formatNumber(filtEst))
 		if rawEst > 0 {
 			pct := float64(savedEst) * 100.0 / float64(rawEst)
-			fmt.Printf("  Saved:    %10s ~ (%.1f%%)\n", formatNumber(savedEst), pct)
+			fmt.Fprintf(out, "  Saved:    %10s ~ (%.1f%%)\n", formatNumber(savedEst), pct)
 		}
 	}
+	return nil
 }
 
 func cmdAudit(args []string) {
-	if err := runAudit(args, os.Stdout, os.Stderr); err != nil {
+	if err := runAudit(args, os.Stdout, os.Stderr, parser.DefaultStore()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func runAudit(args []string, out io.Writer, errOut io.Writer) error {
+func runAudit(args []string, out io.Writer, errOut io.Writer, store parser.Store) error {
 	fs := flag.NewFlagSet("audit", flag.ContinueOnError)
 	fs.SetOutput(errOut)
 	samples := fs.Int("n", 5, "number of samples per category")
@@ -243,24 +288,17 @@ func runAudit(args []string, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 
-	if fs.NArg() < 1 {
-		return fmt.Errorf("Error: session_id is required")
-	}
-	sessionID, err := parser.ResolveSessionID(fs.Arg(0))
+	resolved, err := resolveSession(fs, store)
 	if err != nil {
 		return err
 	}
-	transcriptPath := parser.FindTranscript(sessionID)
-	if transcriptPath == "" {
-		return fmt.Errorf("Transcript not found: %s", sessionID)
-	}
 
-	entries, err := parser.ParseTranscript(transcriptPath)
+	events, err := claudecodec.ReadAll(resolved.Path)
 	if err != nil {
-		return fmt.Errorf("Error parsing transcript: %v", err)
+		return fmt.Errorf("parsing transcript: %w", err)
 	}
 
-	result := analyzer.ComputeAudit(entries)
+	result := analyzer.ComputeAudit(events)
 
 	for _, catName := range []string{"tool_result_cut", "system_noise", "thinking"} {
 		items := result.Categories[catName]
@@ -281,10 +319,18 @@ func runAudit(args []string, out io.Writer, errOut io.Writer) error {
 
 // --- helpers ---
 
+var reorderBoolFlags = map[string]bool{
+	"-verbose-agents":  true,
+	"--verbose-agents": true,
+	"-no-tokens":       true,
+	"--no-tokens":      true,
+}
+
 // reorderArgs moves flags before positional args so Go's flag package
 // can parse them correctly. Go's flag.Parse stops at the first non-flag
 // argument, but argparse (Python) allows intermixed flags and positionals.
-// This makes `audit 3537152c -n 2` work the same as `audit -n 2 3537152c`.
+// reorderBoolFlags must list every supported boolean flag so a following
+// positional session ID is not consumed as a flag value.
 func reorderArgs(args []string) []string {
 	var flags []string
 	var positional []string
@@ -292,6 +338,11 @@ func reorderArgs(args []string) []string {
 	for i < len(args) {
 		if strings.HasPrefix(args[i], "-") {
 			flags = append(flags, args[i])
+			name := strings.SplitN(args[i], "=", 2)[0]
+			if reorderBoolFlags[name] {
+				i++
+				continue
+			}
 			// Check if next arg is the flag's value (not another flag)
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") && !strings.Contains(args[i], "=") {
 				flags = append(flags, args[i+1])
@@ -307,26 +358,18 @@ func reorderArgs(args []string) []string {
 	return append(flags, positional...)
 }
 
-func resolveSessionArg(fs *flag.FlagSet) string {
+func resolveSession(fs *flag.FlagSet, store parser.Store) (parser.ResolvedSession, error) {
 	if fs.NArg() < 1 {
-		fmt.Fprintf(os.Stderr, "Error: session_id is required\n")
-		os.Exit(1)
+		return parser.ResolvedSession{}, fmt.Errorf("session_id is required")
 	}
-	sessionID, err := parser.ResolveSessionID(fs.Arg(0))
+	resolved, err := store.ResolveSession(fs.Arg(0))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+		return parser.ResolvedSession{}, err
 	}
-	return sessionID
-}
-
-func findTranscriptOrExit(sessionID string) string {
-	path := parser.FindTranscript(sessionID)
-	if path == "" {
-		fmt.Fprintf(os.Stderr, "Transcript not found: %s\n", sessionID)
-		os.Exit(1)
+	if resolved.Path == "" {
+		return parser.ResolvedSession{}, fmt.Errorf("transcript not found: %s", resolved.ID)
 	}
-	return path
+	return resolved, nil
 }
 
 func formatNumber(n int) string {

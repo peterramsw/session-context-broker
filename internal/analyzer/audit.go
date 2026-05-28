@@ -4,83 +4,53 @@ import (
 	"fmt"
 	"strings"
 
-	"claude-code-session-reader/internal/jsonutil"
-	"claude-code-session-reader/internal/parser"
-	"claude-code-session-reader/internal/summarizer"
+	"cc-session-reader/internal/session"
 )
 
 type AuditResult struct {
 	Categories map[string][]string
 }
 
-func ComputeAudit(entries []map[string]interface{}) AuditResult {
+func ComputeAudit(events []session.Event) AuditResult {
 	categories := map[string][]string{
 		"tool_result_cut": {},
 		"system_noise":    {},
 		"thinking":        {},
 	}
 
-	for _, entry := range entries {
-		message, ok := entry["message"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		if parser.IsNoise(entry) {
-			text := parser.ExtractAllText(entry)
-			if strings.TrimSpace(text) != "" {
-				entryType := jsonutil.GetStr(entry, "type")
-				snippet := truncateStr(text, 200)
-				categories["system_noise"] = append(categories["system_noise"],
-					fmt.Sprintf("[%s] %s", entryType, snippet))
-			}
-			continue
-		}
-
-		if _, hasToolResult := entry["toolUseResult"]; hasToolResult {
-			if !summarizer.IsUserAnswer(entry) {
-				text := parser.ExtractAllText(entry)
-				if strings.TrimSpace(text) != "" && len(text) > 100 {
-					tr, ok := entry["toolUseResult"].(map[string]interface{})
-					name := "?"
-					if ok {
-						if n := jsonutil.GetStr(tr, "commandName"); n != "" {
-							name = n
-						}
-					}
-					snippet := truncateStr(text, 300)
-					categories["tool_result_cut"] = append(categories["tool_result_cut"],
-						fmt.Sprintf("[%s] %s", name, snippet))
-				}
-			}
-			continue
-		}
-
-		if jsonutil.GetStr(message, "role") == "assistant" {
-			content, ok := message["content"].([]interface{})
-			if !ok {
+	for _, event := range events {
+		switch event.Kind {
+		case session.EventNoise:
+			if event.Noise == nil || strings.TrimSpace(event.Noise.Text) == "" {
 				continue
 			}
-			for _, item := range content {
-				block, isMap := item.(map[string]interface{})
-				if !isMap || jsonutil.GetStr(block, "type") != "thinking" {
-					continue
+			categories["system_noise"] = append(categories["system_noise"],
+				fmt.Sprintf("[%s] %s", event.RawType, session.Truncate(event.Noise.Text, 200)))
+
+		case session.EventToolResult:
+			if event.Tool == nil || event.User != nil && event.User.IsAnswer {
+				continue
+			}
+			if strings.TrimSpace(event.Tool.Text) != "" && len(event.Tool.Text) > 100 {
+				name := event.Tool.RawName
+				if name == "" {
+					name = "?"
 				}
-				thinking := jsonutil.GetStr(block, "thinking")
+				categories["tool_result_cut"] = append(categories["tool_result_cut"],
+					fmt.Sprintf("[%s] %s", name, session.Truncate(event.Tool.Text, 300)))
+			}
+
+		case session.EventAssistantMessage:
+			if event.Assistant == nil {
+				continue
+			}
+			for _, thinking := range event.Assistant.Thinking {
 				if strings.TrimSpace(thinking) != "" {
-					categories["thinking"] = append(categories["thinking"], truncateStr(thinking, 300))
+					categories["thinking"] = append(categories["thinking"], session.Truncate(thinking, 300))
 				}
 			}
 		}
 	}
 
 	return AuditResult{Categories: categories}
-}
-
-func truncateStr(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	return string(runes[:maxLen])
 }

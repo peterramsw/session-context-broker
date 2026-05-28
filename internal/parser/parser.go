@@ -1,8 +1,7 @@
-// Package parser handles transcript I/O, session discovery, and content extraction.
+// Package parser handles session discovery and metadata I/O.
 package parser
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,42 +9,21 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"claude-code-session-reader/internal/jsonutil"
 )
 
-// Directory constants derived from ~/.claude/
-var (
-	ClaudeDir      = filepath.Join(homeDir(), ".claude")
-	ProjectsDir    = filepath.Join(ClaudeDir, "projects")
-	SessionMetaDir = filepath.Join(ClaudeDir, "usage-data", "session-meta")
-)
-
-const (
-	scannerInitBuf = 4 * 1024 * 1024
-	scannerMaxBuf  = 64 * 1024 * 1024
-)
-
-// NewTranscriptScanner opens a file and returns a scanner configured for large JSONL transcripts.
-func NewTranscriptScanner(path string) (*os.File, *bufio.Scanner, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, nil, fmt.Errorf("open transcript: %w", err)
-	}
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, scannerInitBuf), scannerMaxBuf)
-	return f, scanner, nil
+// Store points at Claude Code's on-disk session data.
+type Store struct {
+	ProjectsDir    string
+	SessionMetaDir string
 }
 
-// NoiseTypes are entry types filtered out during transcript processing.
-var NoiseTypes = map[string]bool{
-	"file-history-snapshot": true,
-	"attachment":            true,
-	"bridge-session":        true,
-	"last-prompt":           true,
-	"permission-mode":       true,
-	"ai-title":              true,
-	"queue-operation":       true,
+// DefaultStore returns a Store derived from the current user's ~/.claude.
+func DefaultStore() Store {
+	claudeDir := filepath.Join(homeDir(), ".claude")
+	return Store{
+		ProjectsDir:    filepath.Join(claudeDir, "projects"),
+		SessionMetaDir: filepath.Join(claudeDir, "usage-data", "session-meta"),
+	}
 }
 
 func homeDir() string {
@@ -56,12 +34,12 @@ func homeDir() string {
 	return home
 }
 
-// FindTranscript locates a transcript JSONL file by session ID under ~/.claude/projects/.
-func FindTranscript(sessionID string) string {
+// FindTranscript locates a transcript JSONL file by session ID under the store's projects dir.
+func (s Store) FindTranscript(sessionID string) (string, error) {
 	var found string
-	_ = filepath.Walk(ProjectsDir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(s.ProjectsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return err
 		}
 		if info.IsDir() {
 			return nil
@@ -73,12 +51,78 @@ func FindTranscript(sessionID string) string {
 		}
 		return nil
 	})
-	return found
+	if err != nil {
+		return "", fmt.Errorf("walk projects dir: %w", err)
+	}
+	return found, nil
 }
 
-// LoadSessionMeta reads session metadata from the session-meta directory.
-func LoadSessionMeta(sessionID string) (map[string]interface{}, error) {
-	metaFile := filepath.Join(SessionMetaDir, sessionID+".json")
+// ResolvedSession holds the session ID and transcript path resolved in a single walk.
+type ResolvedSession struct {
+	ID   string
+	Path string
+}
+
+// ResolveSession resolves a prefix to a full session UUID and its transcript path
+// in a single filesystem walk, avoiding the double-walk of ResolveSessionID + FindTranscript.
+func (s Store) ResolveSession(prefix string) (ResolvedSession, error) {
+	if len(prefix) == 36 {
+		path, err := s.FindTranscript(prefix)
+		if err != nil {
+			return ResolvedSession{}, err
+		}
+		return ResolvedSession{ID: prefix, Path: path}, nil
+	}
+
+	type match struct {
+		id   string
+		path string
+	}
+	var matches []match
+	err := filepath.Walk(s.ProjectsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) == ".jsonl" {
+			stem := strings.TrimSuffix(filepath.Base(path), ".jsonl")
+			if strings.HasPrefix(stem, prefix) {
+				matches = append(matches, match{id: stem, path: path})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return ResolvedSession{}, fmt.Errorf("walk projects dir: %w", err)
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].id < matches[j].id })
+
+	if len(matches) == 1 {
+		return ResolvedSession{ID: matches[0].id, Path: matches[0].path}, nil
+	}
+	if len(matches) > 1 {
+		shown := matches
+		if len(shown) > 5 {
+			shown = shown[:5]
+		}
+		shortIDs := make([]string, len(shown))
+		for i, m := range shown {
+			if len(m.id) >= 12 {
+				shortIDs[i] = m.id[:12]
+			} else {
+				shortIDs[i] = m.id
+			}
+		}
+		return ResolvedSession{}, fmt.Errorf("ambiguous prefix '%s', matches: %s", prefix, strings.Join(shortIDs, ", "))
+	}
+	return ResolvedSession{}, fmt.Errorf("session prefix not found: %s", prefix)
+}
+
+// LoadSessionMeta reads session metadata from the store's session-meta directory.
+func (s Store) LoadSessionMeta(sessionID string) (map[string]interface{}, error) {
+	metaFile := filepath.Join(s.SessionMetaDir, sessionID+".json")
 	data, err := os.ReadFile(metaFile)
 	if err != nil {
 		return nil, err
@@ -90,17 +134,18 @@ func LoadSessionMeta(sessionID string) (map[string]interface{}, error) {
 	return meta, nil
 }
 
-// ResolveSessionID resolves a prefix to a full session UUID.
-// If the prefix is already 36 chars (full UUID), it is returned as-is.
-// Returns an error if the prefix is ambiguous.
-func ResolveSessionID(prefix string) (string, error) {
+// ResolveSessionID resolves a prefix to a full session UUID in the store.
+func (s Store) ResolveSessionID(prefix string) (string, error) {
 	if len(prefix) == 36 {
 		return prefix, nil
 	}
 
 	var matches []string
-	_ = filepath.Walk(ProjectsDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+	err := filepath.Walk(s.ProjectsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
 			return nil
 		}
 		if filepath.Ext(path) == ".jsonl" {
@@ -111,6 +156,10 @@ func ResolveSessionID(prefix string) (string, error) {
 		}
 		return nil
 	})
+	if err != nil {
+		return "", fmt.Errorf("walk projects dir: %w", err)
+	}
+	sort.Strings(matches)
 
 	if len(matches) == 1 {
 		return matches[0], nil
@@ -130,67 +179,7 @@ func ResolveSessionID(prefix string) (string, error) {
 		}
 		return "", fmt.Errorf("ambiguous prefix '%s', matches: %s", prefix, strings.Join(shortIDs, ", "))
 	}
-	return prefix, nil
-}
-
-// ParseTranscript reads all JSONL entries from a transcript file into memory.
-func ParseTranscript(path string) ([]map[string]interface{}, error) {
-	f, scanner, err := NewTranscriptScanner(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	var entries []map[string]interface{}
-	for scanner.Scan() {
-		var entry map[string]interface{}
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-			continue
-		}
-		entries = append(entries, entry)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan transcript: %w", err)
-	}
-	return entries, nil
-}
-
-// CollectAgentToolIDs pre-scans a transcript to find tool_use blocks with name "Agent",
-// collecting their IDs for verbose agent output matching.
-func CollectAgentToolIDs(path string) (map[string]bool, error) {
-	ids := make(map[string]bool)
-	f, scanner, err := NewTranscriptScanner(path)
-	if err != nil {
-		return ids, err
-	}
-	defer f.Close()
-	for scanner.Scan() {
-		var entry map[string]interface{}
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-			continue
-		}
-		if jsonutil.GetStr(entry, "type") != "assistant" {
-			continue
-		}
-		message := jsonutil.GetMap(entry, "message")
-		if message == nil {
-			continue
-		}
-		content, ok := message["content"].([]interface{})
-		if !ok {
-			continue
-		}
-		for _, item := range content {
-			block, isMap := item.(map[string]interface{})
-			if !isMap {
-				continue
-			}
-			if jsonutil.GetStr(block, "type") == "tool_use" && jsonutil.GetStr(block, "name") == "Agent" {
-				ids[jsonutil.GetStr(block, "id")] = true
-			}
-		}
-	}
-	return ids, nil
+	return "", fmt.Errorf("session prefix not found: %s", prefix)
 }
 
 // SessionMetaFile holds metadata about a session, used for listing.
@@ -200,8 +189,8 @@ type SessionMetaFile struct {
 }
 
 // ListSessionMetaFiles returns session meta files sorted by modification time (newest first).
-func ListSessionMetaFiles() ([]SessionMetaFile, error) {
-	entries, err := os.ReadDir(SessionMetaDir)
+func (s Store) ListSessionMetaFiles() ([]SessionMetaFile, error) {
+	entries, err := os.ReadDir(s.SessionMetaDir)
 	if err != nil {
 		return nil, fmt.Errorf("read session meta dir: %w", err)
 	}
@@ -216,7 +205,7 @@ func ListSessionMetaFiles() ([]SessionMetaFile, error) {
 			continue
 		}
 		files = append(files, SessionMetaFile{
-			Path:    filepath.Join(SessionMetaDir, e.Name()),
+			Path:    filepath.Join(s.SessionMetaDir, e.Name()),
 			ModTime: info.ModTime(),
 		})
 	}

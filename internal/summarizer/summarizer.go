@@ -1,18 +1,12 @@
-// Package summarizer provides tool call one-line summaries and user answer detection.
+// Package summarizer provides tool call one-line summaries.
 package summarizer
 
 import (
 	"fmt"
 	"strings"
 
-	"claude-code-session-reader/internal/jsonutil"
+	"cc-session-reader/internal/session"
 )
-
-// UserAnswerPrefixes are the known prefixes for user answer tool results.
-var UserAnswerPrefixes = []string{
-	"User has answered your questions:",
-	"Your questions have been answered:",
-}
 
 const (
 	maxCommandLen  = 80
@@ -21,18 +15,18 @@ const (
 )
 
 // SummarizeToolUse produces a one-line summary of a tool_use block.
-func SummarizeToolUse(name string, inp map[string]interface{}) string {
+func SummarizeToolUse(name string, inp session.ToolInput) string {
 	switch name {
 	case "Bash":
-		desc := jsonutil.GetStr(inp, "description")
+		desc := inp.String("description")
 		if desc != "" {
 			return fmt.Sprintf("[Bash] %s", desc)
 		}
-		cmd := jsonutil.GetStr(inp, "command")
-		return fmt.Sprintf("[Bash] %s", truncate(cmd, maxCommandLen))
+		cmd := inp.String("command")
+		return fmt.Sprintf("[Bash] %s", session.Truncate(cmd, maxCommandLen))
 
 	case "Read":
-		path := jsonutil.GetStr(inp, "file_path")
+		path := inp.String("file_path")
 		if path == "" {
 			path = "?"
 		}
@@ -45,70 +39,57 @@ func SummarizeToolUse(name string, inp map[string]interface{}) string {
 		}
 		return fmt.Sprintf("[Read] %s", short)
 
-	case "Edit":
-		path := jsonutil.GetStr(inp, "file_path")
+	case "Edit", "Write":
+		path := inp.String("file_path")
 		if path == "" {
 			path = "?"
 		}
-		idx := strings.LastIndex(path, "/")
 		filename := path
-		if idx >= 0 {
+		if idx := strings.LastIndex(path, "/"); idx >= 0 {
 			filename = path[idx+1:]
 		}
-		return fmt.Sprintf("[Edit] %s", filename)
-
-	case "Write":
-		path := jsonutil.GetStr(inp, "file_path")
-		if path == "" {
-			path = "?"
-		}
-		idx := strings.LastIndex(path, "/")
-		filename := path
-		if idx >= 0 {
-			filename = path[idx+1:]
-		}
-		return fmt.Sprintf("[Write] %s", filename)
+		return fmt.Sprintf("[%s] %s", name, filename)
 
 	case "Agent":
-		desc := jsonutil.GetStr(inp, "description")
+		desc := inp.String("description")
 		if desc == "" {
 			desc = "?"
 		}
-		sub := jsonutil.GetStr(inp, "subagent_type")
+		sub := inp.String("subagent_type")
 		if sub != "" {
 			return fmt.Sprintf("[Agent(%s)] %s", sub, desc)
 		}
 		return fmt.Sprintf("[Agent] %s", desc)
 
 	case "Grep":
-		pat := jsonutil.GetStr(inp, "pattern")
+		pat := inp.String("pattern")
 		if pat == "" {
 			pat = "?"
 		}
-		path := jsonutil.GetStr(inp, "path")
+		path := inp.String("path")
 		if path != "" {
 			return fmt.Sprintf("[Grep] \"%s\" in %s", pat, path)
 		}
 		return fmt.Sprintf("[Grep] \"%s\"", pat)
 
 	case "Glob":
-		pat := jsonutil.GetStr(inp, "pattern")
+		pat := inp.String("pattern")
 		if pat == "" {
 			pat = "?"
 		}
 		return fmt.Sprintf("[Glob] %s", pat)
 
 	case "Skill":
-		skill := jsonutil.GetStr(inp, "skill")
+		skill := inp.String("skill")
 		if skill == "" {
 			skill = "?"
 		}
-		args := jsonutil.GetStr(inp, "args")
+		args := inp.String("args")
 		result := fmt.Sprintf("[Skill] /%s %s", skill, args)
-		return truncate(strings.TrimSpace(result), maxSkillLen)
+		return session.Truncate(strings.TrimSpace(result), maxSkillLen)
 
 	case "AskUserQuestion":
-		qs, hasQuestions := inp["questions"]
+		qs, hasQuestions := inp.Raw["questions"]
 		if !hasQuestions {
 			return "[AskUserQuestion]"
 		}
@@ -122,12 +103,12 @@ func SummarizeToolUse(name string, inp map[string]interface{}) string {
 			if !isMap {
 				continue
 			}
-			questionText := jsonutil.GetStr(qMap, "question")
+			questionText, _ := qMap["question"].(string)
 			if questionText == "" {
 				questionText = "?"
 			}
 			line := fmt.Sprintf("[AskUserQuestion] Q%d: %s", i+1, questionText)
-			lines = append(lines, truncate(line, maxQuestionLen))
+			lines = append(lines, session.Truncate(line, maxQuestionLen))
 		}
 		if len(lines) == 0 {
 			return "[AskUserQuestion]"
@@ -135,7 +116,7 @@ func SummarizeToolUse(name string, inp map[string]interface{}) string {
 		return strings.Join(lines, "\n  ")
 
 	case "ToolSearch":
-		query := jsonutil.GetStr(inp, "query")
+		query := inp.String("query")
 		if query == "" {
 			query = "?"
 		}
@@ -144,125 +125,4 @@ func SummarizeToolUse(name string, inp map[string]interface{}) string {
 	default:
 		return fmt.Sprintf("[%s]", name)
 	}
-}
-
-// SummarizeToolResult produces a short status string from a toolUseResult entry.
-func SummarizeToolResult(entry map[string]interface{}) string {
-	tr, ok := entry["toolUseResult"].(map[string]interface{})
-	if !ok {
-		return ""
-	}
-	isSuccess := true
-	if v, exists := tr["success"]; exists {
-		if b, ok := v.(bool); ok {
-			isSuccess = b
-		}
-	}
-
-	status := "ok"
-	if !isSuccess {
-		status = "FAILED"
-	}
-
-	firstLine := extractFirstLineFromToolResult(entry)
-	if firstLine != "" {
-		return fmt.Sprintf(" -> %s: %s", status, firstLine)
-	}
-	return fmt.Sprintf(" -> %s", status)
-}
-
-// IsUserAnswer checks if a tool result entry contains a user answer.
-func IsUserAnswer(entry map[string]interface{}) bool {
-	message, ok := entry["message"].(map[string]interface{})
-	if !ok {
-		return false
-	}
-	content, ok := message["content"].([]interface{})
-	if !ok {
-		return false
-	}
-	for _, item := range content {
-		block, isMap := item.(map[string]interface{})
-		if !isMap {
-			continue
-		}
-		if jsonutil.GetStr(block, "type") != "tool_result" {
-			continue
-		}
-		sub, isStr := block["content"].(string)
-		if !isStr {
-			continue
-		}
-		for _, prefix := range UserAnswerPrefixes {
-			if strings.HasPrefix(sub, prefix) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// ExtractUserAnswers extracts the user answer text from a tool result entry.
-func ExtractUserAnswers(entry map[string]interface{}) string {
-	message, ok := entry["message"].(map[string]interface{})
-	if !ok {
-		return ""
-	}
-	content, ok := message["content"].([]interface{})
-	if !ok {
-		return ""
-	}
-	for _, item := range content {
-		block, isMap := item.(map[string]interface{})
-		if !isMap {
-			continue
-		}
-		if jsonutil.GetStr(block, "type") != "tool_result" {
-			continue
-		}
-		sub, isStr := block["content"].(string)
-		if !isStr {
-			continue
-		}
-		for _, prefix := range UserAnswerPrefixes {
-			if strings.HasPrefix(sub, prefix) {
-				return sub
-			}
-		}
-	}
-	return ""
-}
-
-// --- helpers ---
-
-func truncate(s string, maxRunes int) string {
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes])
-}
-
-func extractFirstLineFromToolResult(entry map[string]interface{}) string {
-	message, ok := entry["message"].(map[string]interface{})
-	if !ok {
-		return ""
-	}
-	content, ok := message["content"].([]interface{})
-	if !ok {
-		return ""
-	}
-	for _, item := range content {
-		block, isMap := item.(map[string]interface{})
-		if !isMap || jsonutil.GetStr(block, "type") != "tool_result" {
-			continue
-		}
-		sub := block["content"]
-		if s, isStr := sub.(string); isStr && strings.TrimSpace(s) != "" {
-			line := strings.SplitN(strings.TrimSpace(s), "\n", 2)[0]
-			line = truncate(line, 80)
-			return line
-		}
-	}
-	return ""
 }

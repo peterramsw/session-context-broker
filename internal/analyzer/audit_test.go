@@ -4,27 +4,20 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"cc-session-reader/internal/session"
 )
 
 func TestComputeAudit_ToolResultCutUsesRuneSafeTruncation(t *testing.T) {
 	text := strings.Repeat("a", 299) + "你"
-	entries := []map[string]interface{}{
+	events := []session.Event{
 		{
-			"type":          "user",
-			"toolUseResult": map[string]interface{}{"success": true, "commandName": "Bash"},
-			"message": map[string]interface{}{
-				"role": "user",
-				"content": []interface{}{
-					map[string]interface{}{
-						"type":    "tool_result",
-						"content": text,
-					},
-				},
-			},
+			Kind: session.EventToolResult,
+			Tool: &session.ToolResult{Success: true, RawName: "Bash", Text: text},
 		},
 	}
 
-	result := ComputeAudit(entries)
+	result := ComputeAudit(events)
 	items := result.Categories["tool_result_cut"]
 	if len(items) != 1 {
 		t.Fatalf("tool_result_cut count = %d, want 1", len(items))
@@ -38,28 +31,19 @@ func TestComputeAudit_ToolResultCutUsesRuneSafeTruncation(t *testing.T) {
 }
 
 func TestComputeAudit_CategorizesSystemNoiseAndThinking(t *testing.T) {
-	entries := []map[string]interface{}{
+	events := []session.Event{
 		{
-			"type": "system",
-			"message": map[string]interface{}{
-				"content": "system details",
-			},
+			Kind:    session.EventNoise,
+			RawType: "system",
+			Noise:   &session.NoiseEvent{Text: "system details"},
 		},
 		{
-			"type": "assistant",
-			"message": map[string]interface{}{
-				"role": "assistant",
-				"content": []interface{}{
-					map[string]interface{}{
-						"type":     "thinking",
-						"thinking": "private reasoning",
-					},
-				},
-			},
+			Kind:      session.EventAssistantMessage,
+			Assistant: &session.AssistantMessage{Thinking: []string{"private reasoning"}},
 		},
 	}
 
-	result := ComputeAudit(entries)
+	result := ComputeAudit(events)
 	if got := len(result.Categories["system_noise"]); got != 1 {
 		t.Fatalf("system_noise count = %d, want 1", got)
 	}

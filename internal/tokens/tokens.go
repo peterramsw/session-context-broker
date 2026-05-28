@@ -28,18 +28,22 @@ const (
 	asciiTokenRatio    = 0.25
 )
 
-// EstimateTokens provides a heuristic token count.
-// CJK characters are weighted at 1.5 tokens each, other characters at 0.25.
+// EstimateTokens provides a rough token count using character-class heuristics.
+// CJK characters are weighted at ~1.5 tokens each; other characters at ~0.25.
+// This deliberately undercounts single-character inputs due to int truncation,
+// which is acceptable for aggregated context-budget estimates.
 func EstimateTokens(text string) int {
 	cjkCount := 0
+	otherCount := 0
 	for _, ch := range text {
 		if (ch >= cjkUnifiedStart && ch <= cjkUnifiedEnd) ||
 			(ch >= cjkExtAStart && ch <= cjkExtAEnd) {
 			cjkCount++
+		} else {
+			otherCount++
 		}
 	}
-	asciiCount := len(text) - cjkCount
-	return int(float64(cjkCount)*cjkTokenMultiplier + float64(asciiCount)*asciiTokenRatio)
+	return int(float64(cjkCount)*cjkTokenMultiplier + float64(otherCount)*asciiTokenRatio)
 }
 
 // CountTokensAPI calls the Anthropic count_tokens endpoint.
@@ -50,7 +54,10 @@ func CountTokensAPI(text string) (int, error) {
 	if apiKey == "" {
 		return 0, fmt.Errorf("ANTHROPIC_API_KEY not set")
 	}
+	return countTokens(text, apiKey, countTokensURL, &http.Client{Timeout: apiTimeout})
+}
 
+func countTokens(text string, apiKey string, endpoint string, client *http.Client) (int, error) {
 	payload := map[string]interface{}{
 		"model": anthropicModel,
 		"messages": []map[string]interface{}{
@@ -62,7 +69,7 @@ func CountTokensAPI(text string) (int, error) {
 		return 0, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, countTokensURL, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("create request: %w", err)
 	}
@@ -70,7 +77,6 @@ func CountTokensAPI(text string) (int, error) {
 	req.Header.Set("anthropic-version", apiVersion)
 	req.Header.Set("content-type", "application/json")
 
-	client := &http.Client{Timeout: apiTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("http request: %w", err)
