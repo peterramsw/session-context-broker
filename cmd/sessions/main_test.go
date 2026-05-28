@@ -53,7 +53,7 @@ func TestSampleCount(t *testing.T) {
 	}
 }
 
-func TestRunAudit_WithNegativeSamplesDoesNotPanic(t *testing.T) {
+func TestRunAudit_WhenSamplesIsNegative_ThenShowsZeroSamplesWithoutPanic(t *testing.T) {
 	root := t.TempDir()
 	sid := "12345678-1234-1234-1234-123456789abc"
 	projectDir := filepath.Join(root, ".claude", "projects", "proj")
