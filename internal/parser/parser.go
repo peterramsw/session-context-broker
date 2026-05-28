@@ -21,6 +21,22 @@ var (
 	SessionMetaDir = filepath.Join(ClaudeDir, "usage-data", "session-meta")
 )
 
+const (
+	scannerInitBuf = 4 * 1024 * 1024
+	scannerMaxBuf  = 64 * 1024 * 1024
+)
+
+// NewTranscriptScanner opens a file and returns a scanner configured for large JSONL transcripts.
+func NewTranscriptScanner(path string) (*os.File, *bufio.Scanner, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open transcript: %w", err)
+	}
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, scannerInitBuf), scannerMaxBuf)
+	return f, scanner, nil
+}
+
 // NoiseTypes are entry types filtered out during transcript processing.
 var NoiseTypes = map[string]bool{
 	"file-history-snapshot": true,
@@ -119,15 +135,13 @@ func ResolveSessionID(prefix string) (string, error) {
 
 // ParseTranscript reads all JSONL entries from a transcript file into memory.
 func ParseTranscript(path string) ([]map[string]interface{}, error) {
-	f, err := os.Open(path)
+	f, scanner, err := NewTranscriptScanner(path)
 	if err != nil {
-		return nil, fmt.Errorf("open transcript: %w", err)
+		return nil, err
 	}
 	defer f.Close()
 
 	var entries []map[string]interface{}
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 4*1024*1024), 64*1024*1024)
 	for scanner.Scan() {
 		var entry map[string]interface{}
 		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
@@ -145,14 +159,11 @@ func ParseTranscript(path string) ([]map[string]interface{}, error) {
 // collecting their IDs for verbose agent output matching.
 func CollectAgentToolIDs(path string) (map[string]bool, error) {
 	ids := make(map[string]bool)
-	f, err := os.Open(path)
+	f, scanner, err := NewTranscriptScanner(path)
 	if err != nil {
-		return ids, fmt.Errorf("open transcript for agent scan: %w", err)
+		return ids, err
 	}
 	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 4*1024*1024), 64*1024*1024)
 	for scanner.Scan() {
 		var entry map[string]interface{}
 		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {

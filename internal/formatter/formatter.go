@@ -2,11 +2,9 @@
 package formatter
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -27,9 +25,9 @@ func FormatRead(transcriptPath string, sessionID string, maxLines int, isVerbose
 		}
 	}
 
-	f, err := os.Open(transcriptPath)
+	f, scanner, err := parser.NewTranscriptScanner(transcriptPath)
 	if err != nil {
-		return fmt.Errorf("open transcript: %w", err)
+		return err
 	}
 	defer f.Close()
 
@@ -47,9 +45,6 @@ func FormatRead(transcriptPath string, sessionID string, maxLines int, isVerbose
 		}
 		pendingTools = pendingTools[:0]
 	}
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 4*1024*1024), 64*1024*1024)
 
 	for scanner.Scan() {
 		if maxLines > 0 && linesOutput >= maxLines {
@@ -105,12 +100,7 @@ func FormatRead(transcriptPath string, sessionID string, maxLines int, isVerbose
 			}
 
 			for _, tb := range toolBlocks {
-				name := jsonutil.GetStr(tb, "name")
-				if name == "" {
-					name = "?"
-				}
-				inp := jsonutil.GetInputMap(tb)
-				pendingTools = append(pendingTools, summarizer.SummarizeToolUse(name, inp))
+				pendingTools = append(pendingTools, summarizeToolBlock(tb))
 			}
 
 			if hasText && !hasTools {
@@ -156,10 +146,7 @@ func handleToolResultRead(
 		}
 	}
 
-	resultStr := summarizer.SummarizeToolResult(entry)
-	if len(*pendingTools) > 0 {
-		(*pendingTools)[len(*pendingTools)-1] += resultStr
-	}
+	appendToolResult(entry, pendingTools)
 }
 
 // FormatContext streams a transcript in compact context format:
@@ -193,9 +180,9 @@ func FormatContext(transcriptPath string, sessionID string, isVerboseAgents bool
 		fmt.Fprintf(out, "# Session %s | %s | %sm\n\n", shortID, project, duration)
 	}
 
-	f, err := os.Open(transcriptPath)
+	f, scanner, err := parser.NewTranscriptScanner(transcriptPath)
 	if err != nil {
-		return fmt.Errorf("open transcript: %w", err)
+		return err
 	}
 	defer f.Close()
 
@@ -210,9 +197,6 @@ func FormatContext(transcriptPath string, sessionID string, isVerboseAgents bool
 		}
 		pendingTools = pendingTools[:0]
 	}
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 4*1024*1024), 64*1024*1024)
 
 	for scanner.Scan() {
 		entry := safeParse(scanner.Bytes())
@@ -237,16 +221,10 @@ func FormatContext(transcriptPath string, sessionID string, isVerboseAgents bool
 					flush()
 					fmt.Fprintf(out, "Agent result:\n%s\n\n", fullText)
 				} else {
-					resultStr := summarizer.SummarizeToolResult(entry)
-					if len(pendingTools) > 0 {
-						pendingTools[len(pendingTools)-1] += resultStr
-					}
+					appendToolResult(entry, &pendingTools)
 				}
 			} else {
-				resultStr := summarizer.SummarizeToolResult(entry)
-				if len(pendingTools) > 0 {
-					pendingTools[len(pendingTools)-1] += resultStr
-				}
+				appendToolResult(entry, &pendingTools)
 			}
 			continue
 		}
@@ -272,12 +250,7 @@ func FormatContext(transcriptPath string, sessionID string, isVerboseAgents bool
 			}
 
 			for _, tb := range toolBlocks {
-				name := jsonutil.GetStr(tb, "name")
-				if name == "" {
-					name = "?"
-				}
-				inp := jsonutil.GetInputMap(tb)
-				pendingTools = append(pendingTools, summarizer.SummarizeToolUse(name, inp))
+				pendingTools = append(pendingTools, summarizeToolBlock(tb))
 			}
 		}
 	}
@@ -291,6 +264,21 @@ func FormatContext(transcriptPath string, sessionID string, isVerboseAgents bool
 }
 
 // --- helpers ---
+
+func appendToolResult(entry map[string]interface{}, pendingTools *[]string) {
+	resultStr := summarizer.SummarizeToolResult(entry)
+	if len(*pendingTools) > 0 {
+		(*pendingTools)[len(*pendingTools)-1] += resultStr
+	}
+}
+
+func summarizeToolBlock(tb map[string]interface{}) string {
+	name := jsonutil.GetStr(tb, "name")
+	if name == "" {
+		name = "?"
+	}
+	return summarizer.SummarizeToolUse(name, jsonutil.GetInputMap(tb))
+}
 
 func safeParse(data []byte) map[string]interface{} {
 	var entry map[string]interface{}
