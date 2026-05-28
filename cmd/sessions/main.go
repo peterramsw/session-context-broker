@@ -9,12 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode/utf8"
 
+	"claude-code-session-reader/internal/analyzer"
 	"claude-code-session-reader/internal/formatter"
 	"claude-code-session-reader/internal/jsonutil"
 	"claude-code-session-reader/internal/parser"
-	"claude-code-session-reader/internal/summarizer"
 	"claude-code-session-reader/internal/tokens"
 )
 
@@ -162,93 +161,12 @@ func cmdStats(args []string) {
 		os.Exit(1)
 	}
 
-	var rawParts []string
-	var filteredParts []string
-	categories := map[string]int{
-		"user_text":       0,
-		"user_answers":    0,
-		"assistant_text":  0,
-		"tool_summaries":  0,
-		"tool_input_raw":  0,
-		"tool_result_raw": 0,
-		"system_noise":    0,
-	}
-
-	for _, entry := range entries {
-		message, ok := entry["message"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		if parser.IsNoise(entry) {
-			text := parser.ExtractAllText(entry)
-			categories["system_noise"] += utf8.RuneCountInString(text)
-			rawParts = append(rawParts, text)
-			continue
-		}
-
-		content := message["content"]
-
-		// Tool result entries
-		if _, hasToolResult := entry["toolUseResult"]; hasToolResult {
-			full := parser.ExtractAllText(entry)
-			if summarizer.IsUserAnswer(entry) {
-				answer := summarizer.ExtractUserAnswers(entry)
-				categories["user_answers"] += utf8.RuneCountInString(answer)
-				rawParts = append(rawParts, full)
-				filteredParts = append(filteredParts, answer)
-			} else {
-				categories["tool_result_raw"] += utf8.RuneCountInString(full)
-				rawParts = append(rawParts, full)
-				summary := summarizer.SummarizeToolResult(entry)
-				categories["tool_summaries"] += utf8.RuneCountInString(summary)
-				filteredParts = append(filteredParts, summary)
-			}
-			continue
-		}
-
-		role := jsonutil.GetStr(message, "role")
-		switch role {
-		case "user":
-			text := parser.ExtractText(content)
-			if strings.TrimSpace(text) != "" {
-				categories["user_text"] += utf8.RuneCountInString(text)
-				rawParts = append(rawParts, text)
-				filteredParts = append(filteredParts, text)
-			}
-		case "assistant":
-			text := parser.ExtractText(content)
-			if strings.TrimSpace(text) != "" {
-				categories["assistant_text"] += utf8.RuneCountInString(text)
-				rawParts = append(rawParts, text)
-				filteredParts = append(filteredParts, text)
-			}
-			for _, tb := range parser.GetToolUses(content) {
-				rawJSON := jsonutil.MarshalNoEscape(jsonutil.GetInputMap(tb))
-				categories["tool_input_raw"] += utf8.RuneCountInString(rawJSON)
-				rawParts = append(rawParts, rawJSON)
-
-				name := jsonutil.GetStr(tb, "name")
-				if name == "" {
-					name = "?"
-				}
-				summary := summarizer.SummarizeToolUse(name, jsonutil.GetInputMap(tb))
-				categories["tool_summaries"] += utf8.RuneCountInString(summary)
-				filteredParts = append(filteredParts, summary)
-			}
-		}
-	}
-
-	rawText := strings.Join(rawParts, "\n")
-	filteredText := strings.Join(filteredParts, "\n")
-	rawC := utf8.RuneCountInString(rawText)
-	filtC := utf8.RuneCountInString(filteredText)
+	result := analyzer.ComputeStats(entries)
 
 	shortID := sessionID
 	if len(shortID) > 8 {
 		shortID = shortID[:8]
 	}
-
 	info, _ := os.Stat(transcriptPath)
 	fileSize := float64(0)
 	if info != nil {
@@ -258,19 +176,16 @@ func cmdStats(args []string) {
 	fmt.Printf("Session: %s\n", shortID)
 	fmt.Printf("Transcript: %.1fKB\n\n", fileSize)
 	fmt.Println("=== Characters ===")
-	fmt.Printf("  Raw:      %10s\n", formatNumber(rawC))
-	fmt.Printf("  Filtered: %10s\n", formatNumber(filtC))
-	if rawC > 0 {
-		saved := rawC - filtC
-		pct := float64(saved) * 100.0 / float64(rawC)
+	fmt.Printf("  Raw:      %10s\n", formatNumber(result.RawChars))
+	fmt.Printf("  Filtered: %10s\n", formatNumber(result.FilteredChars))
+	if result.RawChars > 0 {
+		saved := result.RawChars - result.FilteredChars
+		pct := float64(saved) * 100.0 / float64(result.RawChars)
 		fmt.Printf("  Saved:    %10s (%.1f%%)\n", formatNumber(saved), pct)
 	}
 
 	fmt.Println("\n=== Breakdown ===")
-	breakdownLabels := []struct {
-		label string
-		key   string
-	}{
+	for _, bl := range []struct{ label, key string }{
 		{"KEPT  user text:        ", "user_text"},
 		{"KEPT  user answers:     ", "user_answers"},
 		{"KEPT  assistant text:   ", "assistant_text"},
@@ -278,9 +193,8 @@ func cmdStats(args []string) {
 		{"CUT   tool input (raw): ", "tool_input_raw"},
 		{"CUT   tool result (raw):", "tool_result_raw"},
 		{"CUT   system/noise:     ", "system_noise"},
-	}
-	for _, bl := range breakdownLabels {
-		fmt.Printf("  %s %10s\n", bl.label, formatNumber(categories[bl.key]))
+	} {
+		fmt.Printf("  %s %10s\n", bl.label, formatNumber(result.Categories[bl.key]))
 	}
 
 	if *isNoTokens {
@@ -288,8 +202,8 @@ func cmdStats(args []string) {
 	}
 
 	fmt.Println()
-	rawAPI, errRaw := tokens.CountTokensAPI(rawText)
-	filtAPI, errFilt := tokens.CountTokensAPI(filteredText)
+	rawAPI, errRaw := tokens.CountTokensAPI(result.RawText)
+	filtAPI, errFilt := tokens.CountTokensAPI(result.FilteredText)
 	if errRaw == nil && errFilt == nil {
 		saved := rawAPI - filtAPI
 		fmt.Println("=== Tokens (Anthropic API) ===")
@@ -300,8 +214,8 @@ func cmdStats(args []string) {
 			fmt.Printf("  Saved:    %10s (%.1f%%)\n", formatNumber(saved), pct)
 		}
 	} else {
-		rawEst := tokens.EstimateTokens(rawText)
-		filtEst := tokens.EstimateTokens(filteredText)
+		rawEst := tokens.EstimateTokens(result.RawText)
+		filtEst := tokens.EstimateTokens(result.FilteredText)
 		savedEst := rawEst - filtEst
 		fmt.Println("=== Tokens (estimated) ===")
 		fmt.Printf("  Raw:      %10s ~\n", formatNumber(rawEst))
@@ -327,78 +241,10 @@ func cmdAudit(args []string) {
 		os.Exit(1)
 	}
 
-	categories := map[string][]string{
-		"tool_result_cut": {},
-		"system_noise":    {},
-		"thinking":        {},
-	}
-
-	for _, entry := range entries {
-		message, ok := entry["message"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		if parser.IsNoise(entry) {
-			text := parser.ExtractAllText(entry)
-			if strings.TrimSpace(text) != "" {
-				entryType := jsonutil.GetStr(entry, "type")
-				snippet := text
-				if len(snippet) > 200 {
-					snippet = snippet[:200]
-				}
-				categories["system_noise"] = append(categories["system_noise"],
-					fmt.Sprintf("[%s] %s", entryType, snippet))
-			}
-			continue
-		}
-
-		// Tool result that is not a user answer
-		if _, hasToolResult := entry["toolUseResult"]; hasToolResult {
-			if !summarizer.IsUserAnswer(entry) {
-				text := parser.ExtractAllText(entry)
-				if strings.TrimSpace(text) != "" && len(text) > 100 {
-					tr, ok := entry["toolUseResult"].(map[string]interface{})
-					name := "?"
-					if ok {
-						if n := jsonutil.GetStr(tr, "commandName"); n != "" {
-							name = n
-						}
-					}
-					snippet := text
-					if len(snippet) > 300 {
-						snippet = snippet[:300]
-					}
-					categories["tool_result_cut"] = append(categories["tool_result_cut"],
-						fmt.Sprintf("[%s] %s", name, snippet))
-				}
-			}
-			continue
-		}
-
-		// Thinking blocks in assistant messages
-		if jsonutil.GetStr(message, "role") == "assistant" {
-			if content, ok := message["content"].([]interface{}); ok {
-				for _, item := range content {
-					block, isMap := item.(map[string]interface{})
-					if !isMap || jsonutil.GetStr(block, "type") != "thinking" {
-						continue
-					}
-					thinking := jsonutil.GetStr(block, "thinking")
-					if strings.TrimSpace(thinking) != "" {
-						snippet := thinking
-						if len(snippet) > 300 {
-							snippet = snippet[:300]
-						}
-						categories["thinking"] = append(categories["thinking"], snippet)
-					}
-				}
-			}
-		}
-	}
+	result := analyzer.ComputeAudit(entries)
 
 	for _, catName := range []string{"tool_result_cut", "system_noise", "thinking"} {
-		items := categories[catName]
+		items := result.Categories[catName]
 		if len(items) == 0 {
 			continue
 		}
