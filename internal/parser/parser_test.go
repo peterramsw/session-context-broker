@@ -32,61 +32,6 @@ func TestFormatTimestamp(t *testing.T) {
 	}
 }
 
-func TestStoreResolveSessionID(t *testing.T) {
-	root := t.TempDir()
-	projectsDir := filepath.Join(root, "projects", "proj")
-	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
-		t.Fatalf("create projects dir: %v", err)
-	}
-	sid := "12345678-1234-1234-1234-123456789abc"
-	writeFile(t, filepath.Join(projectsDir, sid+".jsonl"), "")
-
-	store := Store{ProjectsDir: filepath.Join(root, "projects")}
-	got, err := store.ResolveSessionID("12345678")
-	if err != nil {
-		t.Fatalf("ResolveSessionID returned error: %v", err)
-	}
-	if got != sid {
-		t.Fatalf("ResolveSessionID = %q, want %q", got, sid)
-	}
-}
-
-func TestStoreResolveSessionID_WhenPrefixIsAmbiguous_ThenReturnsError(t *testing.T) {
-	root := t.TempDir()
-	projectsDir := filepath.Join(root, "projects", "proj")
-	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
-		t.Fatalf("create projects dir: %v", err)
-	}
-	writeFile(t, filepath.Join(projectsDir, "12345678-0000-0000-0000-000000000000.jsonl"), "")
-	writeFile(t, filepath.Join(projectsDir, "12345678-1111-1111-1111-111111111111.jsonl"), "")
-
-	store := Store{ProjectsDir: filepath.Join(root, "projects")}
-	_, err := store.ResolveSessionID("12345678")
-	if err == nil {
-		t.Fatal("ResolveSessionID returned nil error, want ambiguous error")
-	}
-	if !strings.Contains(err.Error(), "ambiguous prefix") {
-		t.Fatalf("error = %v, want ambiguous prefix", err)
-	}
-}
-
-func TestStoreResolveSessionID_WhenPrefixHasNoMatch_ThenReturnsError(t *testing.T) {
-	root := t.TempDir()
-	projectsDir := filepath.Join(root, "projects")
-	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
-		t.Fatalf("create projects dir: %v", err)
-	}
-
-	store := Store{ProjectsDir: projectsDir}
-	_, err := store.ResolveSessionID("notfound")
-	if err == nil {
-		t.Fatal("ResolveSessionID returned nil error, want not found error")
-	}
-	if !strings.Contains(err.Error(), "session prefix not found") {
-		t.Fatalf("error = %v, want session prefix not found", err)
-	}
-}
-
 func TestStoreFindTranscript(t *testing.T) {
 	root := t.TempDir()
 	projectsDir := filepath.Join(root, "projects", "proj")

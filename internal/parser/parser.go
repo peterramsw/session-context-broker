@@ -64,7 +64,7 @@ type ResolvedSession struct {
 }
 
 // ResolveSession resolves a prefix to a full session UUID and its transcript path
-// in a single filesystem walk, avoiding the double-walk of ResolveSessionID + FindTranscript.
+// in a single filesystem walk.
 func (s Store) ResolveSession(prefix string) (ResolvedSession, error) {
 	if len(prefix) == 36 {
 		path, err := s.FindTranscript(prefix)
@@ -121,65 +121,17 @@ func (s Store) ResolveSession(prefix string) (ResolvedSession, error) {
 }
 
 // LoadSessionMeta reads session metadata from the store's session-meta directory.
-func (s Store) LoadSessionMeta(sessionID string) (map[string]interface{}, error) {
+func (s Store) LoadSessionMeta(sessionID string) (map[string]any, error) {
 	metaFile := filepath.Join(s.SessionMetaDir, sessionID+".json")
 	data, err := os.ReadFile(metaFile)
 	if err != nil {
 		return nil, err
 	}
-	var meta map[string]interface{}
+	var meta map[string]any
 	if err := json.Unmarshal(data, &meta); err != nil {
 		return nil, fmt.Errorf("parse session meta %s: %w", sessionID, err)
 	}
 	return meta, nil
-}
-
-// ResolveSessionID resolves a prefix to a full session UUID in the store.
-func (s Store) ResolveSessionID(prefix string) (string, error) {
-	if len(prefix) == 36 {
-		return prefix, nil
-	}
-
-	var matches []string
-	err := filepath.Walk(s.ProjectsDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if filepath.Ext(path) == ".jsonl" {
-			stem := strings.TrimSuffix(filepath.Base(path), ".jsonl")
-			if strings.HasPrefix(stem, prefix) {
-				matches = append(matches, stem)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return "", fmt.Errorf("walk projects dir: %w", err)
-	}
-	sort.Strings(matches)
-
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-	if len(matches) > 1 {
-		shown := matches
-		if len(shown) > 5 {
-			shown = shown[:5]
-		}
-		shortIDs := make([]string, len(shown))
-		for i, m := range shown {
-			if len(m) >= 12 {
-				shortIDs[i] = m[:12]
-			} else {
-				shortIDs[i] = m
-			}
-		}
-		return "", fmt.Errorf("ambiguous prefix '%s', matches: %s", prefix, strings.Join(shortIDs, ", "))
-	}
-	return "", fmt.Errorf("session prefix not found: %s", prefix)
 }
 
 // SessionMetaFile holds metadata about a session, used for listing.
