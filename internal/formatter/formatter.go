@@ -14,8 +14,6 @@ import (
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/summarizer"
 )
 
-const toolNameBash = "Bash"
-
 // FormatOptions controls verbosity for formatting functions.
 type FormatOptions struct {
 	VerboseAgents bool
@@ -25,7 +23,6 @@ type FormatOptions struct {
 type pendingTool struct {
 	summary string
 	name    string // e.g. "Bash", "Read", "Edit"
-	toolID  string // last 4 chars of tool_use_id
 }
 
 func FormatRead(transcriptPath string, maxLines int, opts FormatOptions, out io.Writer) error {
@@ -221,7 +218,7 @@ func writeContextHeader(sessionID string, out io.Writer, store parser.Store) {
 func appendToolResult(result *session.ToolResult, pendingTools *[]pendingTool, opts FormatOptions) {
 	if len(*pendingTools) > 0 {
 		last := &(*pendingTools)[len(*pendingTools)-1]
-		if opts.VerboseBash && last.name == toolNameBash {
+		if opts.VerboseBash && last.name == session.ToolBash {
 			last.summary += formatVerboseBashResult(result)
 			return
 		}
@@ -233,7 +230,7 @@ func appendToolResult(result *session.ToolResult, pendingTools *[]pendingTool, o
 		name = "ToolResult"
 	}
 	summary := fmt.Sprintf("[%s]%s", name, result.Summary())
-	if opts.VerboseBash && name == toolNameBash {
+	if opts.VerboseBash && name == session.ToolBash {
 		summary = fmt.Sprintf("[%s]%s", name, formatVerboseBashResult(result))
 	}
 	*pendingTools = append(*pendingTools, pendingTool{
@@ -275,7 +272,6 @@ func summarizeToolUse(tool session.ToolUse) pendingTool {
 	return pendingTool{
 		summary: tagged,
 		name:    name,
-		toolID:  shortID,
 	}
 }
 

@@ -16,6 +16,21 @@ const (
 	EventNoise            EventKind = "noise"
 )
 
+// Tool names. Single source of truth for tool name literals shared across the
+// summarizer, formatter, and claudecodec packages.
+const (
+	ToolBash            = "Bash"
+	ToolRead            = "Read"
+	ToolEdit            = "Edit"
+	ToolWrite           = "Write"
+	ToolAgent           = "Agent"
+	ToolGrep            = "Grep"
+	ToolGlob            = "Glob"
+	ToolSkill           = "Skill"
+	ToolAskUserQuestion = "AskUserQuestion"
+	ToolSearch          = "ToolSearch"
+)
+
 type Event struct {
 	Kind      EventKind
 	Timestamp string
@@ -125,6 +140,12 @@ func FirstLine(s string, maxRunes int) string {
 }
 
 func Truncate(s string, maxRunes int) string {
+	// Byte length >= rune count, so a string within maxRunes bytes is
+	// guaranteed within maxRunes runes — a fast early return that avoids
+	// allocating a rune slice for the common short-string case.
+	if len(s) <= maxRunes {
+		return s
+	}
 	runes := []rune(s)
 	if len(runes) <= maxRunes {
 		return s

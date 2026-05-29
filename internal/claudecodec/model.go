@@ -158,11 +158,6 @@ func extractToolResultText(blocks []rawContentBlock) (string, string) {
 	return "", ""
 }
 
-func isUserAnswer(blocks []rawContentBlock) bool {
-	answer := extractUserAnswer(blocks)
-	return answer != ""
-}
-
 func extractUserAnswer(blocks []rawContentBlock) string {
 	text, _ := extractToolResultText(blocks)
 	for _, prefix := range userAnswerPrefixes {
