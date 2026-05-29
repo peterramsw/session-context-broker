@@ -115,6 +115,52 @@ func TestFormatRead_WhenToolResultHasNoPendingTool_ThenStillWritesSummary(t *tes
 	}
 }
 
+func TestInjectShortID(t *testing.T) {
+	tests := []struct {
+		name    string
+		summary string
+		shortID string
+		want    string
+	}{
+		{
+			name:    "given bracketed summary then inserts id before first bracket",
+			summary: "[Bash] Run tests",
+			shortID: "uCVa",
+			want:    "[Bash#uCVa] Run tests",
+		},
+		{
+			name:    "given parenthesized name then inserts before closing bracket",
+			summary: "[Agent(general)] Inspect",
+			shortID: "uCVa",
+			want:    "[Agent(general)#uCVa] Inspect",
+		},
+		{
+			// Empty short ID (tool_use with no id): summary is returned unchanged,
+			// never "[Bash#] ..." with a dangling separator.
+			name:    "given empty short id then returns summary unchanged",
+			summary: "[Bash] Run tests",
+			shortID: "",
+			want:    "[Bash] Run tests",
+		},
+		{
+			// No closing bracket to anchor on: summary is returned unchanged
+			// rather than appending the id somewhere arbitrary.
+			name:    "given summary without closing bracket then returns summary unchanged",
+			summary: "no brackets here",
+			shortID: "uCVa",
+			want:    "no brackets here",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := injectShortID(tt.summary, tt.shortID); got != tt.want {
+				t.Fatalf("injectShortID(%q, %q) = %q, want %q", tt.summary, tt.shortID, got, tt.want)
+			}
+		})
+	}
+}
+
 const formatterFixtureSessionID = "12345678-1234-1234-1234-123456789abc"
 
 func writeFormatterFixture(t *testing.T) (string, string) {
@@ -214,6 +260,31 @@ func TestFormatReadEvents_WhenVerboseBash_ThenNonBashToolsStillCompressed(t *tes
 	}
 	if !strings.Contains(got, "line1") {
 		t.Fatalf("non-Bash tool summary should contain first line, got:\n%s", got)
+	}
+}
+
+func TestFormatReadEvents_WhenToolResultIsUserAnswer_ThenWritesAnswerBlock(t *testing.T) {
+	// An AskUserQuestion answer arrives as a tool_result event carrying a
+	// User payload with IsAnswer=true. In the read timeline this must render as
+	// a "user (answer)" block, not as a tool result summary. This pins the
+	// answer branch of handleToolResultRead (the read-mode equivalent of the
+	// context-mode "U (answer):" rendering).
+	events := []session.Event{
+		{
+			Kind:      session.EventToolResult,
+			Timestamp: "2026-05-28T00:00:00Z",
+			User:      &session.UserMessage{Text: "ship it", IsAnswer: true},
+			Tool:      &session.ToolResult{ToolUseID: "tool-1", Success: true, Text: "ship it"},
+		},
+	}
+	var out bytes.Buffer
+	if err := FormatReadEvents(events, nil, 0, FormatOptions{}, &out); err != nil {
+		t.Fatalf("FormatReadEvents returned error: %v", err)
+	}
+
+	want := "[05-28 00:00] user (answer):\nship it\n\n"
+	if got := out.String(); got != want {
+		t.Fatalf("answer block mismatch\nwant:\n%q\ngot:\n%q", want, got)
 	}
 }
 

@@ -292,6 +292,39 @@ func TestReadAll_GivenMalformedLineAmongValidLines_ThenReturnsError(t *testing.T
 	}
 }
 
+// A noise entry's text is aggregated by extractAllText, which pulls from three
+// sources that real transcripts populate: top-level text blocks, the nested
+// blocks loop (thinking/tool_use/tool_result), and the toolUseResult CLI fields
+// (stdout/stderr/output/content). This pins all three so the audit/stats noise
+// surface keeps reflecting the full entry rather than dropping nested content.
+func TestParseLine_NoiseEntry_ExtractsTextFromBlocksAndToolUseResult(t *testing.T) {
+	line := `{"type":"system","timestamp":"2026-05-28T00:00:00Z",` +
+		`"toolUseResult":{"stdout":"build ok","stderr":"warn: deprecated"},` +
+		`"message":{"role":"user","content":[` +
+		`{"type":"text","text":"running build"},` +
+		`{"type":"tool_use","name":"Bash","id":"t1","input":{"command":"make"}},` +
+		`{"type":"thinking","thinking":"deciding"}` +
+		`]}}`
+	event := parseLine(t, line)
+
+	if event.Kind != session.EventNoise || event.Noise == nil {
+		t.Fatalf("kind = %s, noise = %#v, want noise event", event.Kind, event.Noise)
+	}
+
+	// Order is deterministic: Message.Text() first, then the blocks loop
+	// (thinking + tool_use input JSON), then toolUseResult fields in declared
+	// key order (stdout, stderr, output, content). tool_result text blocks are
+	// joined by Text() so the plain text block surfaces once.
+	want := "running build\n" +
+		`{"command":"make"}` + "\n" +
+		"deciding\n" +
+		"build ok\n" +
+		"warn: deprecated"
+	if event.Noise.Text != want {
+		t.Fatalf("noise text =\n%q\nwant\n%q", event.Noise.Text, want)
+	}
+}
+
 func parseLine(t *testing.T, line string) session.Event {
 	t.Helper()
 	event, ok, err := ParseLine([]byte(line))
