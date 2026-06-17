@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -57,16 +58,62 @@ func EstimateTokens(text string) int {
 }
 
 // CountTokensAPI calls the Anthropic count_tokens endpoint.
-// Returns (tokenCount, nil) on success, or (0, error) on failure.
-// Requires ANTHROPIC_API_KEY environment variable.
+// Resolves the API key from: env ANTHROPIC_API_KEY → config file path in
+// ~/.claude/skills/sessions/config.json → error.
 func CountTokensAPI(text string) (int, error) {
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	apiKey := resolveAPIKey()
 	if apiKey == "" {
-		return 0, fmt.Errorf("ANTHROPIC_API_KEY not set")
+		return 0, fmt.Errorf("ANTHROPIC_API_KEY not set (set env var or configure anthropic_api_key_file in ~/.claude/skills/sessions/config.json)")
 	}
-	// The per-attempt context (set inside countTokens) owns request deadlines,
-	// so the client carries no global Timeout that would also cap the retry loop.
 	return countTokens(text, apiKey, countTokensURL, &http.Client{})
+}
+
+func resolveAPIKey() string {
+	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+		return key
+	}
+	return readKeyFromConfig()
+}
+
+func readKeyFromConfig() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	configPath := filepath.Join(home, ".claude", "skills", "sessions", "config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return ""
+	}
+	var cfg struct {
+		AnthropicAPIKeyFile string `json:"anthropic_api_key_file"`
+	}
+	if json.Unmarshal(data, &cfg) != nil || cfg.AnthropicAPIKeyFile == "" {
+		return ""
+	}
+	keyPath := cfg.AnthropicAPIKeyFile
+	if len(keyPath) > 0 && keyPath[0] == '~' {
+		keyPath = filepath.Join(home, keyPath[1:])
+	}
+	return parseKeyFromEnvFile(keyPath)
+}
+
+func parseKeyFromEnvFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if bytes.HasPrefix(line, []byte("#")) || !bytes.Contains(line, []byte("=")) {
+			continue
+		}
+		k, v, _ := bytes.Cut(line, []byte("="))
+		if string(bytes.TrimSpace(k)) == "ANTHROPIC_API_KEY" {
+			return string(bytes.TrimSpace(v))
+		}
+	}
+	return ""
 }
 
 func countTokens(text string, apiKey string, endpoint string, client *http.Client) (int, error) {

@@ -93,6 +93,7 @@ func TestEstimateTokens_NonCJKUnicode(t *testing.T) {
 
 func TestCountTokensAPI_WhenAPIKeyIsMissing_ThenReturnsError(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("HOME", t.TempDir()) // no config.json here, so file fallback also fails
 	_, err := CountTokensAPI("hello")
 	if err == nil {
 		t.Fatal("CountTokensAPI returned nil error, want missing key error")
