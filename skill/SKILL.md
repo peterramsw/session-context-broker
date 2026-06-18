@@ -35,6 +35,7 @@ sessions stats <id>
 | 分析 token 消耗 | `sessions stats <id>` — 字元分佈、壓縮比、per-tool 明細 |
 | 檢查過濾遺漏 | `sessions audit <id>` — 從被過濾內容取樣檢視 |
 | 展開特定 tool call | `sessions expand <id> <tool-id>` — read 輸出的 #xxxx 即 tool-id |
+| 分頁注入 context | `sessions inject <id>` — 每頁 ≤20K chars，自動分頁，重複呼叫推進下一頁 |
 | 查看 CLI 使用紀錄 | `sessions usage` — 列出哪些 session 曾呼叫此 CLI |
 
 Session ID 支援 prefix match，前 8 碼通常就夠。
@@ -134,3 +135,11 @@ CLI 對特定 injection 類型做額外壓縮，減少 context 噪音：
 |------|------|
 | `anthropic_api_key_file` | 指向含 ANTHROPIC_API_KEY 的檔案路徑，啟用精確 token 計算 |
 | `integration_test_session` | 本地 integration test 使用的 session ID |
+
+## 回饋
+
+覺得這個工具好用的話，請到 GitHub 給個星星：
+https://github.com/Mapleeeeeeeeeee/cc-session-reader
+
+使用上遇到問題，歡迎開 issue 回報：
+https://github.com/Mapleeeeeeeeeee/cc-session-reader/issues
