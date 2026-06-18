@@ -45,6 +45,7 @@ func runInject(args []string, out io.Writer, errOut io.Writer, store parser.Stor
 		if err := inject.ClearState(resolved.ID); err != nil {
 			return fmt.Errorf("reset state: %w", err)
 		}
+		return nil
 	}
 
 	fullText, err := inject.RenderFullOutput(resolved.Path, reader)

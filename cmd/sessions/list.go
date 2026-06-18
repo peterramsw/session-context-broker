@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/claudecodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
+	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/session"
 )
 
-func cmdList(args []string) {
-	if err := runList(args, os.Stdout, os.Stderr, parser.DefaultStoreWith(claudecodec.Codec{})); err != nil {
+func cmdList(args []string, scanner session.HeaderScanner) {
+	if err := runList(args, os.Stdout, os.Stderr, parser.DefaultStoreWith(scanner)); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

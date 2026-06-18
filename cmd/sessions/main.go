@@ -28,7 +28,7 @@ func main() {
 	subcommand := os.Args[1]
 	switch subcommand {
 	case "list":
-		cmdList(os.Args[2:])
+		cmdList(os.Args[2:], reader)
 	case "read":
 		cmdRead(os.Args[2:], reader)
 	case "context":
