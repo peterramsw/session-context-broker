@@ -36,10 +36,7 @@ func logUsageAsync(cmd string, target string) {
 func waitUsageLog() { usageWG.Wait() }
 
 func cmdUsage(args []string) {
-	if err := runUsage(args, os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	exitOnError(runUsage(args, os.Stdout, os.Stderr))
 }
 
 func runUsage(args []string, out io.Writer, errOut io.Writer) error {

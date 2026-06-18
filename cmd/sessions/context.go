@@ -12,10 +12,7 @@ import (
 )
 
 func cmdContext(args []string, reader session.TranscriptReader) {
-	if err := runContext(args, os.Stdout, os.Stderr, parser.DefaultStore(), reader); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	exitOnError(runContext(args, os.Stdout, os.Stderr, parser.DefaultStore(), reader))
 }
 
 func runContext(args []string, out io.Writer, errOut io.Writer, store parser.Store, reader session.TranscriptReader) error {

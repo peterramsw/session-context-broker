@@ -55,5 +55,16 @@ func main() {
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: sessions <command> [options]")
-	fmt.Fprintln(os.Stderr, "Commands: list, read, context, stats, audit, expand, usage, inject")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Commands:")
+	fmt.Fprintln(os.Stderr, "  list      列出最近的 session")
+	fmt.Fprintln(os.Stderr, "  read      完整對話 + tool call 一行摘要")
+	fmt.Fprintln(os.Stderr, "  context   精簡注入格式（帶 metadata header）")
+	fmt.Fprintln(os.Stderr, "  stats     字元與 token 分佈統計")
+	fmt.Fprintln(os.Stderr, "  audit     檢視被過濾的內容取樣")
+	fmt.Fprintln(os.Stderr, "  expand    展開特定 tool call 完整內容")
+	fmt.Fprintln(os.Stderr, "  usage     CLI 使用紀錄")
+	fmt.Fprintln(os.Stderr, "  inject    分頁注入 session 到 context")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Run 'sessions <command> -h' for command-specific flags.")
 }

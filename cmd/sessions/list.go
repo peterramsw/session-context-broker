@@ -13,10 +13,7 @@ import (
 )
 
 func cmdList(args []string, scanner session.HeaderScanner) {
-	if err := runList(args, os.Stdout, os.Stderr, parser.DefaultStoreWith(scanner)); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	exitOnError(runList(args, os.Stdout, os.Stderr, parser.DefaultStoreWith(scanner)))
 }
 
 func runList(args []string, out io.Writer, errOut io.Writer, store parser.Store) error {

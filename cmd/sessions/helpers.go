@@ -1,12 +1,25 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
 )
+
+func exitOnError(err error) {
+	if err == nil {
+		return
+	}
+	if errors.Is(err, flag.ErrHelp) {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	os.Exit(1)
+}
 
 var reorderBoolFlags = map[string]bool{
 	"verbose-agents":   true,
