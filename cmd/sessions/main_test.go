@@ -1226,6 +1226,9 @@ func TestRunList_GivenHelpFlag_ThenReturnsErrHelp(t *testing.T) {
 	if err == nil || err.Error() != "flag: help requested" {
 		t.Fatalf("runList(-h) = %v, want flag.ErrHelp", err)
 	}
+	if !strings.Contains(stderr.String(), "-n") {
+		t.Fatalf("stderr should contain flag descriptions, got: %q", stderr.String())
+	}
 }
 
 func TestRunInject_GivenHelpFlag_ThenReturnsErrHelp(t *testing.T) {
@@ -1234,14 +1237,79 @@ func TestRunInject_GivenHelpFlag_ThenReturnsErrHelp(t *testing.T) {
 	if err == nil || err.Error() != "flag: help requested" {
 		t.Fatalf("runInject(-h) = %v, want flag.ErrHelp", err)
 	}
+	if !strings.Contains(stderr.String(), "page") {
+		t.Fatalf("stderr should contain flag descriptions, got: %q", stderr.String())
+	}
 }
 
-func TestExitOnError_GivenNil_ThenNoOp(t *testing.T) {
-	// Should not panic or call os.Exit
+func TestRunContext_GivenHelpFlag_ThenReturnsErrHelp(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := runContext([]string{"-h"}, &stdout, &stderr, parser.Store{}, testReader)
+	if err == nil || err.Error() != "flag: help requested" {
+		t.Fatalf("runContext(-h) = %v, want flag.ErrHelp", err)
+	}
+	if !strings.Contains(stderr.String(), "max-lines") {
+		t.Fatalf("stderr should contain flag descriptions, got: %q", stderr.String())
+	}
+}
+
+func TestRunAudit_GivenHelpFlag_ThenReturnsErrHelp(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := runAudit([]string{"-h"}, &stdout, &stderr, parser.Store{}, testReader)
+	if err == nil || err.Error() != "flag: help requested" {
+		t.Fatalf("runAudit(-h) = %v, want flag.ErrHelp", err)
+	}
+	if !strings.Contains(stderr.String(), "-n") {
+		t.Fatalf("stderr should contain flag descriptions, got: %q", stderr.String())
+	}
+}
+
+func TestRunExpand_GivenHelpFlag_ThenReturnsUsageError(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := runExpand([]string{"-h"}, &stdout, &stderr, parser.Store{}, testReader)
+	if err == nil || !strings.Contains(err.Error(), "usage:") {
+		t.Fatalf("runExpand(-h) = %v, want usage error", err)
+	}
+}
+
+func TestRunUsage_GivenHelpFlag_ThenReturnsErrHelp(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := runUsage([]string{"-h"}, &stdout, &stderr)
+	if err == nil || err.Error() != "flag: help requested" {
+		t.Fatalf("runUsage(-h) = %v, want flag.ErrHelp", err)
+	}
+	if !strings.Contains(stderr.String(), "-cmd") {
+		t.Fatalf("stderr should contain flag descriptions, got: %q", stderr.String())
+	}
+}
+
+// Guards against regression where exitOnError would print "Error: <nil>" or
+// "Error: flag: help requested" to stderr instead of being silent.
+func TestExitOnError_GivenNil_ThenNoStderrOutput(t *testing.T) {
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
 	exitOnError(nil)
+	w.Close()
+	os.Stderr = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if buf.Len() > 0 {
+		t.Fatalf("exitOnError(nil) wrote to stderr: %q", buf.String())
+	}
 }
 
-func TestExitOnError_GivenErrHelp_ThenNoOp(t *testing.T) {
-	// Should not panic or call os.Exit
+// Guards against regression where exitOnError would print the ErrHelp message.
+func TestExitOnError_GivenErrHelp_ThenNoStderrOutput(t *testing.T) {
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
 	exitOnError(flag.ErrHelp)
+	w.Close()
+	os.Stderr = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if buf.Len() > 0 {
+		t.Fatalf("exitOnError(flag.ErrHelp) wrote to stderr: %q", buf.String())
+	}
 }
