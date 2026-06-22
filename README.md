@@ -23,161 +23,41 @@ curl -fsSL https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/m
 curl -fsSL https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/main/install.sh | bash -s -- --no-skill
 ```
 
-### 下載 Binary（不需 Go 環境）
+### 其他安裝方式
 
-從 [GitHub Releases](https://github.com/Mapleeeeeeeeeee/cc-session-reader/releases) 下載對應平台的 binary，解壓後放到 PATH：
-
-```bash
-# macOS ARM64 範例
-curl -L https://github.com/Mapleeeeeeeeeee/cc-session-reader/releases/latest/download/cc-session-reader_darwin_arm64.tar.gz | tar xz
-mv cc-session /usr/local/bin/
-```
-
-### go install
-
-```bash
-go install github.com/Mapleeeeeeeeeee/cc-session-reader/cmd/cc-session@latest
-```
-
-安裝後 `cc-session` binary 會放在 `$GOPATH/bin`（確保該路徑在 PATH 中）。
-
-> 如果 `@latest` 遇到 module path 衝突，用 `GOPROXY=direct go install ...@latest`。
-
-### 作為 Claude Code / Agent Skill 使用
-
-將 `SKILL.md` 放到 `~/.claude/skills/cc-session/` (或 `~/.gemini/config/skills/cc-session/`) 目錄下：
-
-```bash
-# 建立目錄並下載 SKILL.md
-mkdir -p ~/.claude/skills/cc-session
-curl -o ~/.claude/skills/cc-session/SKILL.md \
-  https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/main/SKILL.md
-```
-
-之後即可在 Agent 工具中自動載入與使用。
+- **下載 Binary**：從 [GitHub Releases](https://github.com/Mapleeeeeeeeeee/cc-session-reader/releases) 下載對應平台壓縮檔，解壓後放到 PATH。
+- **go install**：`go install github.com/Mapleeeeeeeeeee/cc-session-reader/cmd/cc-session@latest`（binary 放在 `$GOPATH/bin`）。
+- **僅安裝 Skill**：`mkdir -p ~/.claude/skills/cc-session && curl -o ~/.claude/skills/cc-session/SKILL.md https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/main/SKILL.md`
 
 ## 子命令
 
-### list — 瀏覽最近的 session
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `list` | 瀏覽最近的 session | `cc-session list -n 10 -p myproject` |
+| `read` | 完整對話 + inline tool 摘要 | `cc-session read <id> -max-lines 200` |
+| `context` | 精簡注入格式，含 session metadata header | `cc-session context <id>` |
+| `inject` | 分頁 context 注入（每頁 ≤20K chars，自動追蹤進度） | `cc-session inject <id> --page 2` |
+| `stats` | 字元與 token 分佈統計及壓縮比 | `cc-session stats <id> -no-tokens` |
+| `audit` | 取樣被過濾的內容，確認沒漏掉重要資訊 | `cc-session audit <id> -n 10` |
+| `expand` | 展開特定 tool call 的完整 input/result | `cc-session expand <id> uCVa` |
+| `usage` | 查看此 CLI 的使用紀錄 | `cc-session usage -cmd read` |
 
-```bash
-cc-session list              # 最近 20 筆
-cc-session list -n 10        # 最近 10 筆
-cc-session list -p myproject # 依專案名稱過濾
-```
+Session ID 支援 prefix match，通常前 8 碼就夠。`read` 和 `context` 預設截斷 200 行（`-max-lines` 可調），截斷時印出總行數和建議的下一段 offset。
 
-`list` 的來源是 Claude Code 的 session metadata（`~/.claude/usage-data/session-meta/`），
-只涵蓋有 metadata 的 session，數量通常少於磁碟上的全部 transcript。
-若已知 session ID，`read`／`context`／`stats` 可直接以前綴存取任何 transcript，不限於 `list` 列出的。
+`list` 來源是 session metadata（`~/.claude/usage-data/session-meta/`），數量少於磁碟全部 transcript；`read`／`context`／`stats` 可直接存取任何 transcript，不限於 `list` 列出的。
 
-### read — 完整對話 + inline tool 摘要
+### Verbose flags（適用 read / context）
 
-```bash
-cc-session read <session-id>
-cc-session read <session-id> -max-lines 200
-cc-session read <session-id> -verbose-agents
-```
-
-Session ID 支援 prefix match，通常前 8 碼就夠。
-
-預設將工具 I/O、Agent 結果、slash／bash 指令輸出、thinking 都壓成摘要或一行 marker。
-需要完整內容時用對應的 verbose flag（read 與 context 皆適用）：
-
-- `-verbose-agents`：完整保留 Agent subagent 回傳的結果（預設只保留一行摘要）。
-- `-verbose-bash`：完整顯示 Bash 工具的 stdout/stderr（預設摘要）。
-- `-verbose-thinking`：顯示 assistant 的 thinking 區塊（預設隱藏）。
-- `-verbose-commands`：展開 slash／bash 指令的完整輸出（預設只留 `[/cmd]`／`[!cmd]` marker、丟棄終端 UI 與 caveat 樣板）。
-
-`read` 和 `context` 預設輸出 200 行後截斷（`-max-lines` 預設 200），
-截斷時印出總行數和建議的下一段 offset。
-
-### context — 精簡注入格式
-
-```bash
-cc-session context <session-id>
-cc-session context <session-id> -verbose-agents
-```
-
-和 `read` 相同內容，但格式化為可注入對話的 context。包含 session metadata header（專案名、時長）。
-
-### inject — 分頁 context 注入
-
-```bash
-cc-session inject <session-id>          # 注入第一頁（≤20K chars）
-cc-session inject <session-id> --page 2 # 直接跳到第 N 頁
-cc-session inject <session-id> --reset  # 清除注入狀態，從第一頁重新開始
-```
-
-專為 context 注入設計的分頁模式：每頁上限 20K chars，自動追蹤進度。
-重複呼叫 `cc-session inject <id>` 會自動推進到下一頁，
-直到讀完為止（搭配 Claude Code Skill 使用效果最佳）。
-
-注入狀態儲存在 `~/.claude/skills/cc-session/inject-state/`。
-
-### stats — 字元與 token 分佈統計
-
-```bash
-cc-session stats <session-id>
-cc-session stats <session-id> -no-tokens
-```
-
-顯示各類別的字元分佈（user text、assistant text、tool I/O、noise）和壓縮比。
-設有 `ANTHROPIC_API_KEY` 時用 API 精確計算 token，否則用 heuristic 估算。
-
-輸出包含：
-- **Last turn context**：從 JSONL API usage 欄位讀取的實際 token 數（最後一輪）
-- **Token savings**：CLI filtered 輸出 vs 原始 context 的 token 節省對比
-- **Per-tool breakdown**：每個工具的呼叫次數、input chars、result chars
-
-### audit — 檢視被過濾的內容
-
-```bash
-cc-session audit <session-id>
-cc-session audit <session-id> -n 10
-```
-
-從每個過濾類別（tool result content、system noise、thinking）取樣，確認沒漏掉重要內容。
-
-### expand — 展開特定 tool call 的完整內容
-
-```bash
-cc-session expand <session-id> <tool-id> [tool-id...]
-```
-
-`read` 和 `context` 輸出中每個 tool call 都附帶短 ID（如 `[Bash#uCVa]`），`#` 後的 4 碼即為 tool-id。
-用 `expand` 可以查看該 tool call 的完整 input JSON 和 result 原文，適合 debug 特定操作。
-
-### usage — 查看 CLI 使用紀錄
-
-```bash
-cc-session usage              # 列出所有呼叫紀錄
-cc-session usage -n 20        # 最近 20 筆
-cc-session usage -cmd read    # 篩選特定子命令
-```
-
-顯示哪些 session 曾呼叫此 CLI，以及使用了哪些子命令。
-
-## 保留什麼 / 過濾什麼
-
-| 保留 | 過濾 |
+| Flag | 效果 |
 |------|------|
-| User 對話文字 | Tool result stdout/stderr |
-| Assistant 對話文字 | 檔案全文（Read/Edit content） |
-| User answers（AskUserQuestion） | Tool input 完整 JSON |
-| Tool call 一行摘要 | System/noise messages |
-| Agent results（`-verbose-agents`） | Thinking blocks |
+| `-verbose-agents` | 完整保留 Agent subagent 回傳結果（預設只留一行摘要） |
+| `-verbose-bash` | 完整顯示 Bash 工具的 stdout/stderr（預設摘要） |
+| `-verbose-thinking` | 顯示 assistant 的 thinking 區塊（預設隱藏） |
+| `-verbose-commands` | 展開 slash／bash 指令完整輸出（預設只留 marker） |
 
-### 5 種額外壓縮
+## 壓縮邏輯
 
-CLI 對特定 injection 類型做額外壓縮，減少 context 噪音：
-
-| 類型 | 壓縮結果 |
-|------|----------|
-| Skill injections | `[skill: name] args`，重複出現時標注 `(repeat)` |
-| Teammate warnings | `[teammate: id] content`，剝除 XML boilerplate |
-| Command injections | `/command args`，剝除 XML wrapper |
-| Context Usage blocks | 整段移除 |
-| system-reminder | 整段移除 |
+工具呼叫、Bash 輸出、Agent 結果、thinking 都預設壓成摘要或一行 marker；User／Assistant 對話文字完整保留。Skill injection、teammate warning、command injection、Context Usage 區塊、system-reminder 等 injection 類型會額外壓縮或整段移除，減少 context 噪音。詳細過濾規則見 [SKILL.md](SKILL.md)。
 
 ## Config 設定
 
