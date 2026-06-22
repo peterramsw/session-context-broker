@@ -10,6 +10,8 @@ import (
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/tokens"
 )
 
+var version = "dev"
+
 // countTokensFn is the token-counting backend used by runStats. It is a
 // package-level seam so tests can substitute a deterministic offline stub
 // (success or failure) without making real Anthropic API calls.
@@ -29,6 +31,9 @@ func main() {
 	switch subcommand {
 	case "-h", "--help", "help":
 		printUsage()
+		return
+	case "-v", "--version", "version":
+		fmt.Printf("cc-session %s\n", version)
 		return
 	case "list":
 		cmdList(os.Args[2:], reader)

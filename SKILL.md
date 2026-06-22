@@ -16,15 +16,6 @@ allowed-tools:
 curl -fsSL https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/main/install.sh | bash
 ```
 
-# Session Reader
-
-## 前置檢查
-
-如果 `cc-session` 不在 PATH 中，先告知使用者安裝方式：
-```bash
-curl -fsSL https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/main/install.sh | bash
-```
-
 ## 呼叫方式
 
 `cc-session` 是安裝在 PATH 中的 compiled binary，像 `git` 或 `curl` 一樣直接呼叫：

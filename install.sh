@@ -5,16 +5,16 @@ REPO="Mapleeeeeeeeeee/cc-session-reader"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 SKILL_DIR="$HOME/.claude/skills/cc-session"
 SKILL_URL="https://raw.githubusercontent.com/${REPO}/main/SKILL.md"
-FORCE_SKILL=0
+SKIP_SKILL=0
 
 # ── arg parsing ──────────────────────────────────────────────────────────────
 
 for arg in "$@"; do
   case "$arg" in
-    --with-skill) FORCE_SKILL=1 ;;
+    --no-skill) SKIP_SKILL=1 ;;
     --help|-h)
-      echo "Usage: install.sh [--with-skill]"
-      echo "  --with-skill  Install the Claude Code skill without prompting"
+      echo "Usage: install.sh [--no-skill]"
+      echo "  --no-skill  Skip installing the Claude Code skill"
       exit 0
       ;;
     *)
@@ -148,15 +148,14 @@ check_path() {
 # ── skill install ─────────────────────────────────────────────────────────────
 
 install_skill() {
-  if [ "$FORCE_SKILL" -eq 1 ]; then
-    : # fall through to install
-  elif ! is_tty; then
-    echo "Non-interactive mode — use --with-skill to include skill install."
+  if [ "$SKIP_SKILL" -eq 1 ]; then
     return
-  else
-    printf "Install Claude Code skill (cc-session)? [y/N] "
+  fi
+
+  if is_tty; then
+    printf "Install Claude Code skill (cc-session)? [Y/n] "
     read -r answer
-    if ! [[ "$answer" =~ ^[Yy]$ ]]; then
+    if [[ "$answer" =~ ^[Nn]$ ]]; then
       return
     fi
   fi
@@ -176,6 +175,15 @@ install_skill() {
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
+print_next_steps() {
+  echo ""
+  echo "── Getting started ────────────────────────────────────────────────"
+  echo "  cc-session list          # 列出最近的 session"
+  echo "  cc-session read <id>     # 讀取對話內容"
+  echo "  /cc-session              # 在 Claude Code 中使用 (需已安裝 Skill)"
+  echo ""
+}
+
 main() {
   local version platform
   version=$(fetch_latest_version)
@@ -184,6 +192,7 @@ main() {
   install_binary "$version" "$platform"
   check_path
   install_skill
+  print_next_steps
 }
 
 main

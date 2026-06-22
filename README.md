@@ -16,11 +16,11 @@ curl -fsSL https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/m
 ```
 
 腳本會自動下載對應平台的 binary 並放到 `~/.local/bin/cc-session`（可透過 `INSTALL_DIR` 環境變數覆蓋），
-安裝完成後也會詢問是否一併安裝 Claude Code Skill。
+並預設安裝 Claude Code Skill。互動模式下會詢問確認，非互動模式（pipe）下直接安裝。
 
-非互動模式下加 `--with-skill` 自動安裝 Skill：
+不需要 Skill 時加 `--no-skill`：
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/main/install.sh | bash -s -- --with-skill
+curl -fsSL https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/main/install.sh | bash -s -- --no-skill
 ```
 
 ### 下載 Binary（不需 Go 環境）
@@ -223,6 +223,13 @@ internal/
 ```
 
 `claudecodec` 是唯一與 JSONL 格式耦合的套件；其餘套件透過 `TranscriptReader` 和 `HeaderScanner` 介面存取 session 資料。
+
+## 移除
+
+```bash
+rm ~/.local/bin/cc-session
+rm -rf ~/.claude/skills/cc-session
+```
 
 ## Contributing
 
