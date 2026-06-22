@@ -65,6 +65,10 @@ install_skill() {
   echo "Skill installed to $SKILL_DIR/SKILL.md"
 }
 
+TMPDIR_CLEANUP=""
+cleanup() { [ -n "$TMPDIR_CLEANUP" ] && rm -rf "$TMPDIR_CLEANUP"; }
+trap cleanup EXIT
+
 main() {
   local os arch version version_bare download_url tmpdir
 
@@ -83,7 +87,7 @@ main() {
   download_url="https://github.com/${REPO}/releases/download/${version}/cc-session-reader_${version_bare}_${os}_${arch}.tar.gz"
 
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  TMPDIR_CLEANUP="$tmpdir"
 
   echo "Downloading cc-session-reader ${version} (${os}/${arch})..."
   curl -fsSL "$download_url" -o "$tmpdir/cc-session-reader.tar.gz"
