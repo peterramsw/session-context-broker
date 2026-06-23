@@ -2,8 +2,13 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/analyzer"
+	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
 )
 
 func TestPrintCompressionSection_WhenRendered_ThenUsesNewSessionTotalContext(t *testing.T) {
@@ -64,5 +69,92 @@ func TestPrintCompressionSection_GivenEvenCount_ThenPrintsAveragedMedian(t *test
 
 	if got := out.String(); !strings.Contains(got, "Median: 84.6%") {
 		t.Fatalf("compression summary must average the two middle values for even counts:\n%s", got)
+	}
+}
+
+func TestRunBenchmark_WhenSessionHasAPIUsage_ThenUsesTokenCountingAPIForNewContext(t *testing.T) {
+	root := t.TempDir()
+	sid := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	projectDir := filepath.Join(root, "projects", "proj")
+	metaDir := filepath.Join(root, "session-meta")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("create project dir: %v", err)
+	}
+	if err := os.MkdirAll(metaDir, 0o755); err != nil {
+		t.Fatalf("create meta dir: %v", err)
+	}
+
+	transcript := strings.Join([]string{
+		`{"type":"user","timestamp":"2026-05-28T00:00:00Z","message":{"role":"user","content":"hello"}}`,
+		`{"type":"assistant","timestamp":"2026-05-28T00:00:01Z","message":{"role":"assistant","content":"hi","usage":{"input_tokens":100000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":1000}}}`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(projectDir, sid+".jsonl"), []byte(transcript), 0o644); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+	writeListMeta(t, metaDir, sid, "/tmp/proj", "hello")
+
+	const filteredTokenCount = 23_456
+	original := countTokensFn
+	t.Cleanup(func() { countTokensFn = original })
+	var countedText string
+	countTokensFn = func(text string) (int, error) {
+		countedText = text
+		return filteredTokenCount, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
+	if err := runBenchmark([]string{"--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
+		t.Fatalf("runBenchmark returned error: %v", err)
+	}
+
+	if countedText == "" {
+		t.Fatal("countTokensFn was not called")
+	}
+	wantNewContext := analyzer.FormatNumber(40_000 + filteredTokenCount)
+	if got := stdout.String(); !strings.Contains(got, wantNewContext) {
+		t.Fatalf("benchmark output missing NewCtx from token counting API (%s):\n%s", wantNewContext, got)
+	}
+}
+
+func TestRunBenchmark_WhenSessionHasNoAPIUsage_ThenSkipsSession(t *testing.T) {
+	root := t.TempDir()
+	sid := "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	projectDir := filepath.Join(root, "projects", "proj")
+	metaDir := filepath.Join(root, "session-meta")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("create project dir: %v", err)
+	}
+	if err := os.MkdirAll(metaDir, 0o755); err != nil {
+		t.Fatalf("create meta dir: %v", err)
+	}
+
+	transcript := strings.Join([]string{
+		`{"type":"user","timestamp":"2026-05-28T00:00:00Z","message":{"role":"user","content":"hello"}}`,
+		`{"type":"assistant","timestamp":"2026-05-28T00:00:01Z","message":{"role":"assistant","content":"hi"}}`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(projectDir, sid+".jsonl"), []byte(transcript), 0o644); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+	writeListMeta(t, metaDir, sid, "/tmp/proj", "hello")
+
+	original := countTokensFn
+	t.Cleanup(func() { countTokensFn = original })
+	countTokensFn = func(text string) (int, error) {
+		t.Fatal("countTokensFn must not be called for sessions without API usage data")
+		return 0, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
+	if err := runBenchmark([]string{"--n", "1", "--min-kb", "0"}, &stdout, &stderr, store, testReader); err != nil {
+		t.Fatalf("runBenchmark returned error: %v", err)
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, "missing API usage data") || !strings.Contains(got, "No sessions could be processed.") {
+		t.Fatalf("benchmark output should skip sessions without API usage data:\n%s", got)
 	}
 }

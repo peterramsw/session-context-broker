@@ -12,7 +12,6 @@ import (
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/analyzer"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/session"
-	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/tokens"
 )
 
 func cmdBenchmark(args []string, reader session.TranscriptReader) {
@@ -128,14 +127,9 @@ func runBenchmark(args []string, out io.Writer, errOut io.Writer, store parser.S
 
 		contextToks := stats.LastContextTokens
 		if contextToks == 0 {
-			contextToks = tokens.EstimateTokens(stats.RawText)
-		}
-		filteredToks := tokens.EstimateTokens(stats.FilteredText)
-		newContextToks := overheadToks + filteredToks
-
-		savedPct := 0.0
-		if contextToks > 0 {
-			savedPct = float64(contextToks-newContextToks) * 100.0 / float64(contextToks)
+			fmt.Fprintf(out, "  skipping %s: missing API usage data\n",
+				session.ShortID(c.entry.SessionID, 8))
+			continue
 		}
 
 		if stats.CompactCount > 0 {
@@ -143,6 +137,14 @@ func runBenchmark(args []string, out io.Writer, errOut io.Writer, store parser.S
 				session.ShortID(c.entry.SessionID, 8), stats.CompactCount)
 			continue
 		}
+
+		filteredToks, err := countTokensFn(stats.FilteredText)
+		if err != nil {
+			return fmt.Errorf("count filtered tokens for %s: %w", session.ShortID(c.entry.SessionID, 8), err)
+		}
+		newContextToks := overheadToks + filteredToks
+
+		savedPct := float64(contextToks-newContextToks) * 100.0 / float64(contextToks)
 
 		cpt := 1.0
 		if stats.UserTurnCount > 0 && stats.APICallCount > stats.UserTurnCount {

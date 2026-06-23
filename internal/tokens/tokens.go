@@ -1,4 +1,4 @@
-// Package tokens provides token counting via Anthropic API and heuristic estimation.
+// Package tokens provides token counting via the Anthropic API.
 package tokens
 
 import (
@@ -30,34 +30,6 @@ const (
 	maxAttempts    = 3
 	baseRetryDelay = 500 * time.Millisecond
 )
-
-// CJK Unicode ranges for token estimation.
-const (
-	cjkUnifiedStart    = 0x4E00
-	cjkUnifiedEnd      = 0x9FFF
-	cjkExtAStart       = 0x3400
-	cjkExtAEnd         = 0x4DBF
-	cjkTokenMultiplier = 1.5
-	asciiTokenRatio    = 0.25
-)
-
-// EstimateTokens provides a rough token count using character-class heuristics.
-// CJK characters are weighted at ~1.5 tokens each; other characters at ~0.25.
-// This deliberately undercounts single-character inputs due to int truncation,
-// which is acceptable for aggregated context-budget estimates.
-func EstimateTokens(text string) int {
-	cjkCount := 0
-	otherCount := 0
-	for _, ch := range text {
-		if (ch >= cjkUnifiedStart && ch <= cjkUnifiedEnd) ||
-			(ch >= cjkExtAStart && ch <= cjkExtAEnd) {
-			cjkCount++
-		} else {
-			otherCount++
-		}
-	}
-	return int(float64(cjkCount)*cjkTokenMultiplier + float64(otherCount)*asciiTokenRatio)
-}
 
 // CountTokensAPI calls the Anthropic count_tokens endpoint.
 // Resolves the API key from: env ANTHROPIC_API_KEY → config file path in

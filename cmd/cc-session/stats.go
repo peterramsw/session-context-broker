@@ -10,7 +10,6 @@ import (
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/analyzer"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/session"
-	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/tokens"
 )
 
 func cmdStats(args []string, reader session.TranscriptReader) {
@@ -76,10 +75,11 @@ func runStats(args []string, out io.Writer, errOut io.Writer, store parser.Store
 				opts.RawTokens = rawAPI
 				opts.FilteredTokens = filtAPI
 			} else {
-				opts.RawTokens = tokens.EstimateTokens(result.RawText)
-				opts.FilteredTokens = tokens.EstimateTokens(result.FilteredText)
-				opts.TokenErr = errFilt
-				opts.UseEstimate = true
+				if errFilt != nil {
+					opts.TokenErr = errFilt
+				} else {
+					opts.TokenErr = errRaw
+				}
 			}
 		}
 	}

@@ -19,6 +19,9 @@ Note the `Last turn context` value. This is your session overhead (system prompt
 
 ### 2. Run the benchmark
 
+The benchmark uses Anthropic's token counting API for the compressed history,
+so `ANTHROPIC_API_KEY` or `anthropic_api_key_file` must be configured.
+
 ```bash
 cc-session benchmark --overhead <your-number>
 ```
@@ -127,7 +130,7 @@ Turn N (N≥2): same as A but with smaller base
 | Parameter | Source | Description |
 |-----------|--------|-------------|
 | X | `stats.LastContextTokens` | Original session context size |
-| C | `tokens.EstimateTokens(filteredText)` | cc-session compressed history size |
+| C | Anthropic token counting API on `filteredText` | cc-session compressed history size |
 | overhead | `--overhead` flag (user-measured) | System + tools + CLAUDE.md |
 | NewCtx | `overhead + C` | New session total context after injecting cc-session output |
 | K | `APICallCount / UserTurnCount` | API calls per user turn |
@@ -138,9 +141,10 @@ Turn N (N≥2): same as A but with smaller base
 
 The compression table compares total context to total context: `X` vs `NewCtx`.
 Cost simulation still keeps `C` and `overhead` separate because cache setup writes
-the new session base as `overhead + C`. All values except `overhead` are derived
-per-session from real data. Fallback constants are used only when session data is
-insufficient.
+the new session base as `overhead + C`. `X` comes from transcript API usage and
+`C` comes from the Anthropic token counting API. Fallback constants are used only
+for behavior that cannot be read directly from transcript usage, such as sparse
+tool I/O data.
 
 ### Simplifications
 
@@ -172,9 +176,9 @@ insufficient.
          │               - CompactCount (for skip detection)
          ▼
 ┌─────────────────────┐
-│  tokens.Estimate    │  Char-based heuristic (~4 chars/token for ASCII,
-│  Tokens(text)       │  ~1.5 for CJK). Used for filteredTokens.
-└────────┬────────────┘  LastContextTokens comes from API usage (exact).
+│  tokens.Count       │  Anthropic token counting API for filteredTokens.
+│  TokensAPI(text)    │  LastContextTokens comes from transcript API usage.
+└────────┬────────────┘
          │
          ▼
 ┌─────────────────────┐

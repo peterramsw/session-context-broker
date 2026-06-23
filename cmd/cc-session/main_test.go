@@ -15,7 +15,6 @@ import (
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/claudecodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/session"
-	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/tokens"
 )
 
 // testReader is the concrete reader used by all tests.
@@ -387,17 +386,10 @@ func TestRunStats_WhenNoTokens_ThenWritesCharacterBreakdown(t *testing.T) {
 	}
 }
 
-// When the Anthropic API is unreachable (no API key), the two concurrent
-// CountTokensAPI calls both fail and runStats must fall back to the local
-// heuristic estimate. This guards the fallback branch — the only token path
-// exercised by the existing suite uses --no-tokens, which skips it entirely.
-// Offline and deterministic: clearing ANTHROPIC_API_KEY makes both calls error.
-func TestRunStats_WhenTokenAPIUnavailable_ThenFallsBackToEstimate(t *testing.T) {
-	// Fixture has a tool_use whose raw input/result is CUT from the filtered
-	// stream, so RawText strictly exceeds FilteredText. This makes the raw >
-	// filtered invariant non-trivial: a SUT mutation that swaps the two streams
-	// turns the assertion red (which it would not with an empty-tool fixture
-	// where the streams are equal).
+// When token counting fails, runStats must not fall back to local estimates.
+// Token output is only meaningful when backed by the Anthropic token counting
+// API; without it, the command should explain how to configure the API key.
+func TestRunStats_WhenTokenAPIUnavailable_ThenPrintsConfigHintWithoutEstimate(t *testing.T) {
 	root := t.TempDir()
 	sid := "12345678-1234-1234-1234-123456789abc"
 	projectDir := filepath.Join(root, ".claude", "projects", "proj")
@@ -420,63 +412,27 @@ func TestRunStats_WhenTokenAPIUnavailable_ThenFallsBackToEstimate(t *testing.T) 
 	writeListMeta(t, metaDir, sid, "/tmp/proj", "hello")
 	store := parser.Store{ProjectsDir: filepath.Join(root, ".claude", "projects"), SessionMetaDir: metaDir}
 
-	// Empty key + no config.json => CountTokensAPI returns an error before
-	// any network call, so both goroutines fail and runStats takes the estimate branch.
+	// Empty key + no config.json => CountTokensAPI returns before any network call.
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("HOME", root)
 
 	var stdout, stderr bytes.Buffer
-	// No --no-tokens: we want the token-counting path to actually run.
 	if err := runStats([]string{sid}, &stdout, &stderr, store, testReader); err != nil {
 		t.Fatalf("runStats returned error: %v", err)
 	}
 	got := stdout.String()
 
-	// Proves we took the fallback branch, not the API branch nor --no-tokens.
-	if !strings.Contains(got, "=== Tokens (estimated) ===") {
-		t.Fatalf("stdout missing estimated-tokens header:\n%s", got)
-	}
-	// UX: the fallback must explain itself so the user knows why they got an
-	// estimate. The hint goes to stdout (not stderr) to avoid red text in
-	// PowerShell. A mutation that drops the warning turns this red.
 	if !strings.Contains(got, "hint: to see token counts") {
 		t.Fatalf("stdout missing config hint:\n%s", got)
 	}
 	if strings.Contains(stderr.String(), "hint:") {
 		t.Fatalf("hint must not appear in stderr (renders red in PowerShell):\n%s", stderr.String())
 	}
+	if strings.Contains(got, "=== Tokens (estimated) ===") {
+		t.Fatalf("stdout must not print heuristic token estimates:\n%s", got)
+	}
 	if strings.Contains(got, "=== Tokens (Anthropic API) ===") {
-		t.Fatalf("stdout unexpectedly took the API branch:\n%s", got)
-	}
-	// Both estimates print with the '~' approximate marker.
-	if strings.Count(got, "~") < 2 {
-		t.Fatalf("stdout missing '~' markers on raw and filtered estimates:\n%s", got)
-	}
-
-	// Re-derive both estimates from the analyzer output (the same source
-	// runStats uses) rather than transcribing runStats' printed numbers. The
-	// fixture cuts real tool content, so RawText differs from FilteredText and
-	// the two estimates come out different — which is what lets the line-routing
-	// assertions below distinguish a stream swap.
-	//
-	// Note: we deliberately do NOT assert raw >= filtered. EstimateTokens is not
-	// monotonic with content size (filtering replaces raw tool JSON with a
-	// human-readable summary that can be longer for short inputs), so any such
-	// ordering would be a false invariant rather than a real guarantee.
-	result := analyzer.ComputeStats(mustReadAll(t, filepath.Join(projectDir, sid+".jsonl")))
-	rawEst := tokens.EstimateTokens(result.RawText)
-	filtEst := tokens.EstimateTokens(result.FilteredText)
-	if rawEst == filtEst {
-		t.Fatalf("fixture too weak: raw and filtered estimates both %d, a stream swap would be undetectable", rawEst)
-	}
-	// The raw estimate must land on the "Raw:" line and the filtered estimate on
-	// the "Filtered:" line. A SUT mutation that swaps the two streams moves each
-	// number onto the wrong labelled line and turns these red.
-	if !strings.Contains(got, "Raw:      "+pad10(analyzer.FormatNumber(rawEst))+" ~") {
-		t.Fatalf("stdout missing raw estimate %s on Raw line:\n%s", analyzer.FormatNumber(rawEst), got)
-	}
-	if !strings.Contains(got, "Filtered: "+pad10(analyzer.FormatNumber(filtEst))+" ~") {
-		t.Fatalf("stdout missing filtered estimate %s on Filtered line:\n%s", analyzer.FormatNumber(filtEst), got)
+		t.Fatalf("stdout unexpectedly took the API success branch:\n%s", got)
 	}
 }
 

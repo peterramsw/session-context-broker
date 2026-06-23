@@ -20,7 +20,6 @@ type RenderOptions struct {
 	RawTokens      int
 	TokenErr       error
 	HasAPIData     bool // true when the caller had context token data from the API
-	UseEstimate    bool // true when RawTokens/FilteredTokens are local estimates, not API counts
 	SkipTokens     bool // true when -no-tokens was requested
 }
 
@@ -111,16 +110,6 @@ func RenderStats(out io.Writer, errOut io.Writer, result StatsResult, opts Rende
 			}
 		} else {
 			PrintConfigHint(out)
-		}
-	} else if opts.UseEstimate {
-		PrintConfigHint(out)
-		saved := opts.RawTokens - opts.FilteredTokens
-		fmt.Fprintln(out, "=== Tokens (estimated) ===")
-		fmt.Fprintf(out, "  Raw:      %10s ~\n", FormatNumber(opts.RawTokens))
-		fmt.Fprintf(out, "  Filtered: %10s ~\n", FormatNumber(opts.FilteredTokens))
-		if opts.RawTokens > 0 {
-			pct := float64(saved) * 100.0 / float64(opts.RawTokens)
-			fmt.Fprintf(out, "  Saved:    %10s ~ (%.1f%%)\n", FormatNumber(saved), pct)
 		}
 	} else {
 		if opts.TokenErr == nil {

@@ -223,32 +223,9 @@ func TestRenderStats_GivenHasAPIDataWithTokenError_WhenRendered_ThenConfigHintWr
 	}
 }
 
-func TestRenderStats_GivenUseEstimate_WhenRendered_ThenTokenEstimateSectionPresent(t *testing.T) {
+func TestRenderStats_GivenNoAPIDataAndTokenCounts_WhenRendered_ThenAnthropicAPITokenSectionPresent(t *testing.T) {
 	opts := baseOpts()
 	opts.HasAPIData = false
-	opts.UseEstimate = true
-	opts.RawTokens = 1800
-	opts.FilteredTokens = 900
-	var out, errOut bytes.Buffer
-	RenderStats(&out, &errOut, baseResult(), opts)
-	body := out.String()
-
-	assertOutputContains(t, body, "=== Tokens (estimated) ===")
-	assertOutputContains(t, body, "1,800") // raw estimate
-	assertOutputContains(t, body, "900")   // filtered estimate
-	// config hint shown in stdout so it doesn't render red in PowerShell
-	if !strings.Contains(body, "anthropic_api_key_file") {
-		t.Errorf("expected config hint in out for UseEstimate path, got: %q", body)
-	}
-	if strings.Contains(errOut.String(), "anthropic_api_key_file") {
-		t.Errorf("config hint must not appear in errOut (would render red in PowerShell), got: %q", errOut.String())
-	}
-}
-
-func TestRenderStats_GivenNoAPIDataAndNoEstimateAndNoError_WhenRendered_ThenAnthropicAPITokenSectionPresent(t *testing.T) {
-	opts := baseOpts()
-	opts.HasAPIData = false
-	opts.UseEstimate = false
 	opts.RawTokens = 1800
 	opts.FilteredTokens = 900
 	var out, errOut bytes.Buffer
@@ -263,7 +240,6 @@ func TestRenderStats_GivenNoAPIDataAndNoEstimateAndNoError_WhenRendered_ThenAnth
 func TestRenderStats_GivenNoAPIDataWithTokenError_WhenRendered_ThenConfigHintWrittenToOut(t *testing.T) {
 	opts := baseOpts()
 	opts.HasAPIData = false
-	opts.UseEstimate = false
 	opts.TokenErr = errors.New("no key")
 	var out, errOut bytes.Buffer
 	RenderStats(&out, &errOut, baseResult(), opts)
