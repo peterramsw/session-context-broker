@@ -51,6 +51,8 @@ func main() {
 		cmdUsage(os.Args[2:])
 	case "inject":
 		cmdInject(os.Args[2:], reader)
+	case "benchmark":
+		cmdBenchmark(os.Args[2:], reader)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", subcommand)
 		printUsage()
@@ -69,7 +71,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  audit     檢視被過濾的內容取樣")
 	fmt.Fprintln(os.Stderr, "  expand    展開特定 tool call 完整內容")
 	fmt.Fprintln(os.Stderr, "  usage     CLI 使用紀錄")
-	fmt.Fprintln(os.Stderr, "  inject    分頁注入 session 到 context")
+	fmt.Fprintln(os.Stderr, "  inject      分頁注入 session 到 context")
+	fmt.Fprintln(os.Stderr, "  benchmark   掃描近期 session，計算壓縮率與成本比較")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run 'cc-session <command> -h' for command-specific flags.")
 }

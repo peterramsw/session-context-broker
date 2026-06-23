@@ -30,6 +30,9 @@ type StatsResult struct {
 	LastContextTokens int
 	TotalOutputTokens int
 	APICallCount      int
+	UserTurnCount     int
+
+	CompactCount int
 }
 
 func ComputeStats(events []session.Event) StatsResult {
@@ -46,11 +49,14 @@ func ComputeStats(events []session.Event) StatsResult {
 	}
 	perTool := map[string]*ToolStats{}
 	seenSkills := map[string]bool{}
-	var lastContextTokens, totalOutputTokens, apiCallCount int
+	var lastContextTokens, totalOutputTokens, apiCallCount, compactCount, userTurnCount int
 	var prevUsage *session.Usage
 
 	for _, event := range events {
 		switch event.Kind {
+		case session.EventCompactBoundary:
+			compactCount++
+
 		case session.EventNoise:
 			if event.Noise == nil {
 				continue
@@ -121,6 +127,7 @@ func ComputeStats(events []session.Event) StatsResult {
 				continue
 			}
 
+			userTurnCount++
 			categories["user_text"] += utf8.RuneCountInString(event.User.Text)
 			rawParts = append(rawParts, event.User.Text)
 			if compacted, ok := session.CompactTaskNotification(event.User.Text); ok {
@@ -210,5 +217,7 @@ func ComputeStats(events []session.Event) StatsResult {
 		LastContextTokens: lastContextTokens,
 		TotalOutputTokens: totalOutputTokens,
 		APICallCount:      apiCallCount,
+		UserTurnCount:     userTurnCount,
+		CompactCount:      compactCount,
 	}
 }

@@ -201,6 +201,7 @@ func collapseWhitespace(s string) string {
 
 type rawEntry struct {
 	Type          string          `json:"type"`
+	Subtype       string          `json:"subtype"`
 	Timestamp     string          `json:"timestamp"`
 	Message       *rawMessage     `json:"message"`
 	ToolUseResult json.RawMessage `json:"toolUseResult"`

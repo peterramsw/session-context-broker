@@ -180,11 +180,11 @@ func TestRunList_WhenProjectFilterMatchesNothing_ThenWritesNoSessionsFound(t *te
 	if err != nil {
 		t.Fatalf("runList returned error: %v", err)
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty", stdout.String())
+	if got := stdout.String(); got != "No sessions found.\n" {
+		t.Fatalf("stdout = %q, want no sessions message", got)
 	}
-	if got := stderr.String(); got != "No sessions found.\n" {
-		t.Fatalf("stderr = %q, want no sessions message", got)
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
 

@@ -28,6 +28,7 @@ const (
 	EventAssistantMessage EventKind = "assistant_message"
 	EventToolResult       EventKind = "tool_result"
 	EventNoise            EventKind = "noise"
+	EventCompactBoundary  EventKind = "compact_boundary"
 )
 
 // Tool names. Single source of truth for tool name literals shared across the

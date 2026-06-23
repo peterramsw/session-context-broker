@@ -91,6 +91,11 @@ func ParseLine(line []byte) (session.Event, bool, error) {
 		RawType:   raw.Type,
 	}
 
+	if raw.Type == "system" && raw.Subtype == "compact_boundary" {
+		event.Kind = session.EventCompactBoundary
+		return event, true, nil
+	}
+
 	if raw.Message == nil {
 		if noiseTypes[raw.Type] {
 			event.Kind = session.EventNoise

@@ -69,7 +69,7 @@ func runList(args []string, out io.Writer, errOut io.Writer, store parser.Store)
 	}
 
 	if printed == 0 {
-		fmt.Fprintln(errOut, "No sessions found.")
+		fmt.Fprintln(out, "No sessions found.")
 	}
 	return nil
 }

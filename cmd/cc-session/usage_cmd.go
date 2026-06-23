@@ -57,7 +57,7 @@ func runUsage(args []string, out io.Writer, errOut io.Writer) error {
 	}
 
 	if len(entries) == 0 {
-		fmt.Fprintln(errOut, "No usage entries found.")
+		fmt.Fprintln(out, "No usage entries found.")
 		return nil
 	}
 
