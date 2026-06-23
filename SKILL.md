@@ -9,155 +9,33 @@ allowed-tools:
   - Read
 ---
 
-## 呼叫方式
-
-`cc-session` 是安裝在 PATH 中的 compiled binary，像 `git` 或 `curl` 一樣直接呼叫：
-
-```bash
-cc-session read <id>
-cc-session list -p <project>
-cc-session stats <id>
-```
-
-在任何工作目錄都能執行，由 Bash 工具呼叫。
-
-## 選擇子命令
-
-每個子命令對應一個使用意圖，根據使用者想做的事選擇：
+## 子命令
 
 | 意圖 | 命令 |
 |------|------|
 | 找目標 session | `cc-session list` — 列出最近 session，`-p` 過濾專案 |
-| 讀對話內容 | `cc-session read <id>` — 對話全文 + tool call 一行摘要 |
-| 注入為 context | `cc-session context <id>` — 同 read 但更緊湊，帶 metadata header |
-| 分析 token 消耗 | `cc-session stats <id>` — 字元分佈、壓縮比、per-tool 明細 |
-| 檢查過濾遺漏 | `cc-session audit <id>` — 從被過濾內容取樣檢視 |
-| 展開特定 tool call | `cc-session expand <id> <tool-id>` — read 輸出的 #xxxx 即 tool-id |
-| 分頁注入 context | `cc-session inject <id>` — 每頁 ≤20K chars，自動分頁，重複呼叫推進下一頁 |
-| 查看 CLI 使用紀錄 | `cc-session usage` — 列出哪些 session 曾呼叫此 CLI |
+| 回顧特定段落 | `cc-session read <id>` — 對話全文 + tool call 一行摘要，`-offset` 跳讀 |
+| 完整載入為 context | `cc-session inject <id>` — 每頁 ≤20K chars，自動分頁，重複呼叫推進下一頁 |
+| 注入為 context（單次） | `cc-session context <id>` — 同 read 但更緊湊，帶 metadata header |
+| 展開單一 tool call | `cc-session expand <id> <tool-id>` — tool-id 取自 read 輸出的 `[Tool#xxxx]` |
+| 展開同類所有 tool call | `cc-session read <id> -verbose-bash` — 也有 `-verbose-agents` / `-verbose-thinking` |
+| 分析 token 消耗 | `cc-session stats <id>` |
+| 檢查過濾遺漏 | `cc-session audit <id>` |
+| 查看 CLI 使用紀錄 | `cc-session usage` |
 
-Session ID 支援 prefix match，前 8 碼通常就夠。
+Session ID 支援 prefix match，前 8 碼通常就夠。各子命令的 flags 用 `-h` 查看。
 
 ## read vs inject
 
-`read` 適合回顧特定段落（手動 `-offset` 跳讀）；`inject` 適合完整載入供全局分析（自動分頁，重複呼叫即翻頁）。
-使用者問特定問題用 `read`，要分析整個 session 的流程或找改善空間用 `inject`。
+使用者要查特定資訊（「上次那個 bug 怎麼修的」、「看一下那段討論」）→ `read`，用 `-offset` 跳到相關段落。
+使用者要全局分析（「這個 session 有哪些流程可以改善」、「幫我回顧上次的開發過程」）→ `inject`，完整載入後分析。
 
-## read 分頁
+## 分頁
 
-大 session 的 read 輸出可達數千行。一次全倒會超出 Bash stdout buffer，
-被 harness 寫入 persisted-output 檔案，之後只能用 Read 分段載入——等同讀原始 JSONL。
+大 session 的輸出可達數千行，一次全倒會超出 Bash stdout buffer 被寫入檔案，等同回到讀原始 JSONL。
 
-`read` 和 `context` 預設輸出 200 行後截斷（`-max-lines` 預設 200），
-截斷時印出總行數和建議的下一段 offset。
-
-讀取流程：
-1. `cc-session read <id>` → 前 200 行 + 總行數提示
-2. `cc-session read <id> -offset 180 -max-lines 200` → 第 180-380 行（overlap 前頁尾部 20 行銜接上下文）
-3. 重複直到讀完或已取得所需資訊
-
-全文輸出用 `-max-lines 0`。只在確認輸出行數可控時使用。
-
-## inject 分頁
-
-`inject` 自動管理分頁狀態，不需要手動追蹤 offset：
-
-1. `cc-session inject <id>` → 第 1 頁
-2. `cc-session inject <id>` → 第 2 頁（自動推進）
-3. 重複直到顯示 `[inject complete]`
-
-| Flag | 說明 |
-|------|------|
-| `-page N` | 跳到第 N 頁（1-based） |
-| `-reset` | 清除進度，從頭開始 |
-
-## Flags
-
-### 分頁控制（read/context）
-
-| Flag | 預設 | 說明 |
-|------|------|------|
-| `-max-lines N` | 200 | 輸出行數上限，0 = 無限制 |
-| `-offset N` | 0 | 從第 N 行開始輸出 |
-
-### inject 控制
-
-| Flag | 說明 |
-|------|------|
-| `-page N` | 跳到第 N 頁（1-based，0 = 自動推進） |
-| `-reset` | 清除進度狀態，下次從第 1 頁開始 |
-
-### 詳細模式（read/context）
-
-預設輸出壓縮了 tool I/O 和 thinking，只保留一行摘要。
-當使用者需要檢視被壓縮的原始內容時，用對應的 verbose flag 展開：
-
-| Flag | 展開內容 |
-|------|----------|
-| `-verbose-agents` | Agent subagent 回傳的完整分析結果 |
-| `-verbose-bash` | Bash stdout/stderr 完整輸出 |
-| `-verbose-thinking` | Assistant thinking 區塊 |
-| `-verbose-commands` | Slash/bash 指令的完整終端輸出 |
-
-### Stats 選項
-
-| Flag | 說明 |
-|------|------|
-| `-no-tokens` | 跳過 token 計算（需要 API key），只看字元分佈 |
-
-### Usage 選項
-
-| Flag | 說明 |
-|------|------|
-| `-n N` | 限制輸出筆數 |
-| `-cmd X` | 篩選特定子命令（如 `-cmd read`） |
-
-## 過濾邏輯
-
-CLI 的價值在於大幅縮減 session 體積，讓 AI 能在 context 內讀完整對話。
-
-保留：對話文字、tool call 一行摘要。
-過濾：tool result 原始輸出、檔案內容、tool input JSON、system/noise messages。
-壓縮比視 session 組成而定：tool I/O 為主 80-88%，純對話為主 40-65%。
-
-### Filtered output 的 5 種壓縮
-
-CLI 對特定 injection 類型做額外壓縮，減少 context 噪音：
-
-| 類型 | 壓縮結果 |
-|------|----------|
-| Skill injections | `[skill: name] args`，重複出現時標注 `(repeat)` |
-| Teammate warnings | `[teammate: id] content`，剝除 XML boilerplate |
-| Command injections | `/command args`，剝除 XML wrapper |
-| Context Usage blocks | 整段移除 |
-| system-reminder | 整段移除 |
-
-## Stats 輸出說明
-
-`cc-session stats <id>` 顯示的資訊包含：
-
-- **Last turn context**：從 JSONL 中 API usage 欄位讀取的實際 token 數（最後一輪）
-- **Token savings**：CLI filtered 輸出 vs 原始 context 的 token 節省對比
-- **Per-tool breakdown**：每個工具的呼叫次數、input chars、result chars
-
-精確 token 計數需要在 config 設定 `anthropic_api_key_file`；
-未設定時自動以字元數估算。
-
-## Config 設定
-
-`~/.claude/skills/cc-session/config.json` 支援以下欄位：
-
-```json
-{
-  "anthropic_api_key_file": "/path/to/api-key-file",
-  "integration_test_session": "<session-id>"
-}
-```
-
-| 欄位 | 用途 |
-|------|------|
-| `anthropic_api_key_file` | 指向含 ANTHROPIC_API_KEY 的檔案路徑，啟用精確 token 計算 |
-| `integration_test_session` | 本地 integration test 使用的 session ID |
+**read**：預設 200 行截斷。用 `-offset 180 -max-lines 200` 接續（overlap 20 行銜接上下文）。
+**inject**：自動追蹤進度，重複呼叫即翻頁，顯示 `[inject complete]` 後用 `-reset` 從頭開始。
 
 ## 回饋
 
