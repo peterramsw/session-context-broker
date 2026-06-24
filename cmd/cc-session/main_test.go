@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -1320,6 +1321,11 @@ func TestLogUsageAsync_GivenNoUsageEnabled_ThenDoesNotWriteToLog(t *testing.T) {
 }
 
 func TestLogUsageAsync_GivenCallerSession_ThenWritesToLog(t *testing.T) {
+	// DetectCallerSession uses forward-slash path mapping that only works on
+	// macOS/Linux where Claude Code actually creates session files.
+	if runtime.GOOS == "windows" {
+		t.Skip("Claude Code sessions only exist on macOS/Linux")
+	}
 	root := t.TempDir()
 	t.Setenv("HOME", root)
 	t.Setenv("USERPROFILE", root)
