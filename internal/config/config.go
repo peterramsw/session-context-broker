@@ -9,11 +9,25 @@ import (
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/skillpath"
 )
 
+// flexBool unmarshals JSON booleans, numbers, and strings into a bool.
+// Accepted truthy values: true, 1, "1", "true", "yes".
+type flexBool bool
+
+func (b *flexBool) UnmarshalJSON(data []byte) error {
+	switch string(data) {
+	case "true", "1", `"1"`, `"true"`, `"yes"`:
+		*b = true
+	default:
+		*b = false
+	}
+	return nil
+}
+
 // Config holds resolved configuration from config.json and env var overrides.
 type Config struct {
-	AnthropicAPIKeyFile    string `json:"anthropic_api_key_file"`
-	IntegrationTestSession string `json:"integration_test_session"`
-	NoUsage                bool   `json:"no_usage"`
+	AnthropicAPIKeyFile    string   `json:"anthropic_api_key_file"`
+	IntegrationTestSession string   `json:"integration_test_session"`
+	NoUsage                flexBool `json:"no_usage"`
 
 	anthropicAPIKey string
 }

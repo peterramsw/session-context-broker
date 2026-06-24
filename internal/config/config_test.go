@@ -20,6 +20,15 @@ func writeConfigFile(t *testing.T, dir string, v any) string {
 	return path
 }
 
+func writeRawConfigFile(t *testing.T, dir string, raw string) string {
+	t.Helper()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(raw), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return path
+}
+
 func TestLoadFromPath_GivenValidConfigJSON_ThenPopulatesFields(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfigFile(t, dir, map[string]any{
@@ -98,6 +107,58 @@ func TestLoadFromPath_GivenCCSessionNoUsageEmpty_ThenDoesNotSetNoUsage(t *testin
 
 	if cfg.NoUsage {
 		t.Error("NoUsage = true, want false when CC_SESSION_NO_USAGE is empty string")
+	}
+}
+
+func TestFlexBool_GivenVariousTruthyValues_ThenAllParsedAsTrue(t *testing.T) {
+	cases := []struct {
+		label string
+		json  string
+	}{
+		{"bool true", `{"no_usage": true}`},
+		{"number 1", `{"no_usage": 1}`},
+		{"string 1", `{"no_usage": "1"}`},
+		{"string true", `{"no_usage": "true"}`},
+		{"string yes", `{"no_usage": "yes"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			dir := t.TempDir()
+			path := writeRawConfigFile(t, dir, tc.json)
+			t.Setenv("ANTHROPIC_API_KEY", "")
+			t.Setenv("CC_SESSION_NO_USAGE", "")
+
+			cfg := LoadFromPath(path)
+			if !cfg.NoUsage {
+				t.Errorf("NoUsage = false for JSON %s", tc.json)
+			}
+		})
+	}
+}
+
+func TestFlexBool_GivenFalsyValues_ThenParsedAsFalse(t *testing.T) {
+	cases := []struct {
+		label string
+		json  string
+	}{
+		{"bool false", `{"no_usage": false}`},
+		{"number 0", `{"no_usage": 0}`},
+		{"string 0", `{"no_usage": "0"}`},
+		{"string no", `{"no_usage": "no"}`},
+		{"string empty", `{"no_usage": ""}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			dir := t.TempDir()
+			path := writeRawConfigFile(t, dir, tc.json)
+			t.Setenv("ANTHROPIC_API_KEY", "")
+			t.Setenv("CC_SESSION_NO_USAGE", "")
+
+			cfg := LoadFromPath(path)
+			if cfg.NoUsage {
+				t.Errorf("NoUsage = true for JSON %s", tc.json)
+			}
+		})
 	}
 }
 
