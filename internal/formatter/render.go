@@ -79,8 +79,9 @@ func renderUserMessage(user *session.UserMessage, opts FormatOptions, seenSkills
 }
 
 type pendingTool struct {
-	summary string
-	name    string // e.g. "Bash", "Read", "Edit"
+	toolUseID string
+	summary   string
+	name      string // e.g. "Bash", "Read", "Edit"
 }
 
 func loadEvents(transcriptPath string, isVerboseAgents bool, reader session.TranscriptReader) ([]session.Event, map[string]bool, error) {
@@ -96,6 +97,19 @@ func loadEvents(transcriptPath string, isVerboseAgents bool, reader session.Tran
 }
 
 func appendToolResult(result *session.ToolResult, pendingTools *[]pendingTool, opts FormatOptions) {
+	if result.ToolUseID != "" {
+		for i := range *pendingTools {
+			pt := &(*pendingTools)[i]
+			if pt.toolUseID == result.ToolUseID {
+				if opts.VerboseBash && pt.name == session.ToolBash {
+					pt.summary += formatVerboseBashResult(result)
+					return
+				}
+				pt.summary += result.Summary()
+				return
+			}
+		}
+	}
 	if len(*pendingTools) > 0 {
 		last := &(*pendingTools)[len(*pendingTools)-1]
 		if opts.VerboseBash && last.name == session.ToolBash {
@@ -150,8 +164,9 @@ func summarizeToolUse(tool session.ToolUse) pendingTool {
 	// "[Agent(general)] desc" becomes "[Agent(general)#ol-1] desc".
 	tagged := injectShortID(summary, shortID)
 	return pendingTool{
-		summary: tagged,
-		name:    name,
+		toolUseID: tool.ID,
+		summary:   tagged,
+		name:      name,
 	}
 }
 

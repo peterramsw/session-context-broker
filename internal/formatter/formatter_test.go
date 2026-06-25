@@ -736,6 +736,80 @@ func TestFormatReadEvents_GivenZeroMaxLines_WhenUnlimited_ThenNoTruncationMessag
 	}
 }
 
+func TestAppendToolResult_WhenParallelToolCalls_ThenMatchesByToolUseID(t *testing.T) {
+	tests := []struct {
+		name        string
+		pending     []pendingTool
+		result      session.ToolResult
+		wantMatch   int // index of pending tool that should receive the result (-1 = new orphan appended)
+		wantNoMatch int // index that should NOT receive the result (-1 = skip check)
+	}{
+		{
+			name: "given matching ID then attaches to correct pending tool",
+			pending: []pendingTool{
+				{toolUseID: "aaa", summary: "[Read] main.go", name: "Read"},
+				{toolUseID: "bbb", summary: "[Read] util.go", name: "Read"},
+			},
+			result:      session.ToolResult{ToolUseID: "aaa", Success: true},
+			wantMatch:   0,
+			wantNoMatch: 1,
+		},
+		{
+			name: "given empty ID then falls back to last pending tool",
+			pending: []pendingTool{
+				{toolUseID: "aaa", summary: "[Read] main.go", name: "Read"},
+				{toolUseID: "bbb", summary: "[Read] util.go", name: "Read"},
+			},
+			result:      session.ToolResult{ToolUseID: "", Success: true},
+			wantMatch:   1,
+			wantNoMatch: 0,
+		},
+		{
+			name: "given non-matching ID then falls back to last pending tool",
+			pending: []pendingTool{
+				{toolUseID: "aaa", summary: "[Read] main.go", name: "Read"},
+				{toolUseID: "bbb", summary: "[Read] util.go", name: "Read"},
+			},
+			result:      session.ToolResult{ToolUseID: "zzz", Success: true},
+			wantMatch:   1,
+			wantNoMatch: 0,
+		},
+		{
+			name:        "given no pending tools then creates orphan entry",
+			pending:     []pendingTool{},
+			result:      session.ToolResult{ToolUseID: "aaa", Success: true, RawName: "Bash"},
+			wantMatch:   -1,
+			wantNoMatch: -1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pending := make([]pendingTool, len(tt.pending))
+			copy(pending, tt.pending)
+
+			appendToolResult(&tt.result, &pending, FormatOptions{})
+
+			if tt.wantMatch == -1 {
+				if len(pending) != 1 {
+					t.Fatalf("expected 1 orphan entry, got %d", len(pending))
+				}
+				if !strings.Contains(pending[0].summary, "-> ok") {
+					t.Fatalf("orphan entry missing result summary, got: %q", pending[0].summary)
+				}
+				return
+			}
+
+			if !strings.Contains(pending[tt.wantMatch].summary, "-> ok") {
+				t.Fatalf("pending[%d] should have result summary, got: %q", tt.wantMatch, pending[tt.wantMatch].summary)
+			}
+			if tt.wantNoMatch >= 0 && strings.Contains(pending[tt.wantNoMatch].summary, "-> ok") {
+				t.Fatalf("pending[%d] should NOT have result summary, got: %q", tt.wantNoMatch, pending[tt.wantNoMatch].summary)
+			}
+		})
+	}
+}
+
 // TestFormatReadEvents_GivenOffsetExceedsTotal_WhenFormatted_ThenEmitsOffsetExceedsMessage
 // verifies that an offset past the end of the content produces a clear message
 // rather than silently emitting empty output.
