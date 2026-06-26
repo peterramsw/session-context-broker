@@ -520,13 +520,109 @@ func TestRunBenchmark_GivenNoAPIFlagAndToolUse_ThenToolIOPerCallUsesCharsPerToke
 	}
 }
 
-func TestCountInjectPages_GivenTextExceedingInjectLimit_ThenUsesInjectPagination(t *testing.T) {
-	fullText := strings.Repeat("x\n", 20_001)
+func TestRunBenchmark_GivenFractionalK_ThenDerivesPromptFromFractionalCallsPerTurn(t *testing.T) {
+	root := t.TempDir()
+	sid := "33333333-3333-3333-3333-333333333333"
+	projectDir := filepath.Join(root, "projects", "proj")
+	metaDir := filepath.Join(root, "session-meta")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("create project dir: %v", err)
+	}
+	if err := os.MkdirAll(metaDir, 0o755); err != nil {
+		t.Fatalf("create meta dir: %v", err)
+	}
 
-	got := countInjectPages(fullText)
+	transcript := strings.Join([]string{
+		`{"type":"user","timestamp":"2026-05-28T00:00:00Z","message":{"role":"user","content":"first prompt"}}`,
+		`{"type":"assistant","timestamp":"2026-05-28T00:00:01Z","message":{"role":"assistant","content":"first reply","usage":{"input_tokens":55000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":1500}}}`,
+		`{"type":"assistant","timestamp":"2026-05-28T00:00:02Z","message":{"role":"assistant","content":"follow-up api call","usage":{"input_tokens":70000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":1500}}}`,
+		`{"type":"user","timestamp":"2026-05-28T00:00:03Z","message":{"role":"user","content":"second prompt"}}`,
+		`{"type":"assistant","timestamp":"2026-05-28T00:00:04Z","message":{"role":"assistant","content":"second reply","usage":{"input_tokens":85000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":1500}}}`,
+		`{"type":"user","timestamp":"2026-05-28T00:00:05Z","message":{"role":"user","content":"third prompt"}}`,
+		`{"type":"assistant","timestamp":"2026-05-28T00:00:06Z","message":{"role":"assistant","content":"third reply","usage":{"input_tokens":100000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":1500}}}`,
+		"",
+	}, "\n")
+	transcriptPath := filepath.Join(projectDir, sid+".jsonl")
+	if err := os.WriteFile(transcriptPath, []byte(transcript), 0o644); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+	writeListMeta(t, metaDir, sid, "/tmp/proj", "first prompt")
 
-	if got <= 1 {
-		t.Fatalf("countInjectPages() = %d, want multiple pages for text over inject page size", got)
+	stats := analyzer.ComputeStats(mustReadAll(t, transcriptPath))
+	if stats.UserTurnCount != 3 {
+		t.Fatalf("fixture UserTurnCount = %d, want 3", stats.UserTurnCount)
+	}
+	if stats.APICallCount != 4 {
+		t.Fatalf("fixture APICallCount = %d, want 4", stats.APICallCount)
+	}
+	if stats.LastContextTokens != 100_000 {
+		t.Fatalf("fixture LastContextTokens = %d, want 100000", stats.LastContextTokens)
+	}
+	if stats.TotalOutputTokens != 6_000 {
+		t.Fatalf("fixture TotalOutputTokens = %d, want 6000", stats.TotalOutputTokens)
+	}
+	if len(stats.PerTool) != 0 {
+		t.Fatalf("fixture PerTool entries = %d, want 0 to exercise fallback ToolIOPerCall", len(stats.PerTool))
+	}
+
+	original := newCountTokensFn
+	t.Cleanup(func() { newCountTokensFn = original })
+	newCountTokensFn = func(model string) (countTokensFunc, error) {
+		return func(text string) (int, error) {
+			return 50_000, nil
+		}, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
+	if err := runBenchmark([]string{"--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
+		t.Fatalf("runBenchmark returned error: %v", err)
+	}
+
+	got := stdout.String()
+	costSection := outputSection(got, "=== Cost Savings Per Session")
+	row := outputLineContaining(costSection, "33333333")
+	if row == "" {
+		t.Fatalf("cost section missing fractional-K row:\nsection:\n%s\nfull output:\n%s", costSection, got)
+	}
+
+	fields := strings.Fields(row)
+	if len(fields) < 8 {
+		t.Fatalf("cost row has unexpected format:\nrow: %s\nfull output:\n%s", row, got)
+	}
+	if fields[4] != "1.3" {
+		t.Fatalf("cost row K = %s, want 1.3 for APICallCount/UserTurnCount = 4/3:\nrow: %s", fields[4], row)
+	}
+	if fields[len(fields)-2] != "3%" {
+		t.Fatalf("cost row 10-turn saving = %s, want 3%%; rounded K prompt derivation would render 2%%:\nrow: %s\nfull output:\n%s",
+			fields[len(fields)-2], row, got)
+	}
+}
+
+func TestCountInjectPages_GivenBoundaryText_ThenMatchesInjectPagination(t *testing.T) {
+	tests := []struct {
+		name     string
+		fullText string
+		want     int
+	}{
+		{name: "empty", fullText: "", want: 0},
+		{name: "short single line", fullText: "abc", want: 1},
+		{name: "single line at newline-adjusted limit", fullText: strings.Repeat("x", 19_999), want: 1},
+		{name: "single line over newline-adjusted limit", fullText: strings.Repeat("x", 20_000), want: 1},
+		{name: "two lines exactly at limit", fullText: strings.Repeat("x", 9_999) + "\n" + strings.Repeat("x", 9_999), want: 1},
+		{name: "two lines one byte over limit", fullText: strings.Repeat("x", 9_999) + "\n" + strings.Repeat("x", 10_000), want: 2},
+		{name: "many tiny lines exactly at limit", fullText: strings.Repeat("x\n", 10_000), want: 1},
+		{name: "many tiny lines one line over limit", fullText: strings.Repeat("x\n", 10_001), want: 2},
+		{name: "trailing newline is dropped", fullText: "line\n", want: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := countInjectPages(tt.fullText)
+			if got != tt.want {
+				t.Fatalf("countInjectPages() = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
 
