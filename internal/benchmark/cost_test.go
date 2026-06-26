@@ -302,8 +302,8 @@ func Test_CumulativeCostB(t *testing.T) {
 }
 
 func Test_CumulativeCostBWithInjectPages_GivenMultiplePages_ThenSetupCostsMoreThanOneShot(t *testing.T) {
-	oneShot := CumulativeCostBWithInjectPages(0, 100000, 50000, 1, testParams, PricingOpus)
-	multiPage := CumulativeCostBWithInjectPages(0, 100000, 50000, 5, testParams, PricingOpus)
+	oneShot := CumulativeCostBWithInjectPages(0, 50000, 1, testParams, PricingOpus)
+	multiPage := CumulativeCostBWithInjectPages(0, 50000, 5, testParams, PricingOpus)
 
 	if !approxEqual(oneShot, 0.5625) {
 		t.Fatalf("one-page setup cost = %.10f, want historical one-shot cost 0.5625", oneShot)
@@ -381,33 +381,72 @@ func Test_CumulativeCostB_GivenNoCompression_ThenNeverCheaperThanCostA(t *testin
 	}
 }
 
-func Test_ComputeCostMetrics_GivenMultiPageInject_ThenBreakEvenLaterAndSavingsLower(t *testing.T) {
-	oneShot := Result{
-		ContextTokens:  100000,
-		FilteredTokens: 50000,
-		CallsPerTurn:   1.0,
-		ToolIOPerCall:  3000,
-		AvgResponse:    2000,
-		Prompt:         10000,
-		InjectPages:    1,
+func Test_ComputeCostMetrics_GivenInjectPages_ThenColdAndWarmMetricsMatchFixture(t *testing.T) {
+	tests := []struct {
+		name                 string
+		injectPages          int
+		wantBreakEven        int
+		wantSaving10Pct      float64
+		wantSaving100Pct     float64
+		wantWarmBreakEven    int
+		wantWarmSaving10Pct  float64
+		wantWarmSaving100Pct float64
+	}{
+		{
+			name:                 "OnePage",
+			injectPages:          1,
+			wantBreakEven:        1,
+			wantSaving10Pct:      3.0142271521581656,
+			wantSaving100Pct:     1.2012610310922243,
+			wantWarmBreakEven:    92,
+			wantWarmSaving10Pct:  -32.302631578947356,
+			wantWarmSaving100Pct: 0.11611374407584504,
+		},
+		{
+			name:                 "FivePages",
+			injectPages:          5,
+			wantBreakEven:        28,
+			wantSaving10Pct:      -4.219918013021479,
+			wantSaving100Pct:     0.8496724366262155,
+			wantWarmBreakEven:    117,
+			wantWarmSaving10Pct:  -42.17105263157893,
+			wantWarmSaving100Pct: -0.23933649289099318,
+		},
 	}
-	multiPage := oneShot
-	multiPage.InjectPages = 5
 
-	ComputeCostMetrics(&oneShot, 40000, PricingOpus)
-	ComputeCostMetrics(&multiPage, 40000, PricingOpus)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := Result{
+				ContextTokens:  100000,
+				FilteredTokens: 50000,
+				CallsPerTurn:   1.0,
+				ToolIOPerCall:  3000,
+				AvgResponse:    2000,
+				Prompt:         10000,
+				InjectPages:    tt.injectPages,
+			}
 
-	if oneShot.BreakEven <= 0 {
-		t.Fatalf("one-shot fixture must have finite break-even, got %d", oneShot.BreakEven)
-	}
-	if multiPage.BreakEven <= oneShot.BreakEven {
-		t.Fatalf("multi-page break-even = %d, want later than one-shot break-even %d", multiPage.BreakEven, oneShot.BreakEven)
-	}
-	if multiPage.Saving10Pct >= oneShot.Saving10Pct {
-		t.Fatalf("multi-page 10-turn saving = %.10f, want less than one-shot %.10f", multiPage.Saving10Pct, oneShot.Saving10Pct)
-	}
-	if multiPage.Saving100Pct >= oneShot.Saving100Pct {
-		t.Fatalf("multi-page 100-turn saving = %.10f, want less than one-shot %.10f", multiPage.Saving100Pct, oneShot.Saving100Pct)
+			ComputeCostMetrics(&r, 40000, PricingOpus)
+
+			if r.BreakEven != tt.wantBreakEven {
+				t.Errorf("BreakEven = %d, want %d", r.BreakEven, tt.wantBreakEven)
+			}
+			if !approxEqual(r.Saving10Pct, tt.wantSaving10Pct) {
+				t.Errorf("Saving10Pct = %.15f, want %.15f", r.Saving10Pct, tt.wantSaving10Pct)
+			}
+			if !approxEqual(r.Saving100Pct, tt.wantSaving100Pct) {
+				t.Errorf("Saving100Pct = %.15f, want %.15f", r.Saving100Pct, tt.wantSaving100Pct)
+			}
+			if r.WarmBreakEven != tt.wantWarmBreakEven {
+				t.Errorf("WarmBreakEven = %d, want %d", r.WarmBreakEven, tt.wantWarmBreakEven)
+			}
+			if !approxEqual(r.WarmSaving10Pct, tt.wantWarmSaving10Pct) {
+				t.Errorf("WarmSaving10Pct = %.15f, want %.15f", r.WarmSaving10Pct, tt.wantWarmSaving10Pct)
+			}
+			if !approxEqual(r.WarmSaving100Pct, tt.wantWarmSaving100Pct) {
+				t.Errorf("WarmSaving100Pct = %.15f, want %.15f", r.WarmSaving100Pct, tt.wantWarmSaving100Pct)
+			}
+		})
 	}
 }
 

@@ -153,7 +153,7 @@ func CumulativeCostAWarm(turns int, x int, sp CostParams, p Pricing) float64 {
 //
 // Turn N (N>=2): same structure as A but with smaller base, cross-turn write = growth.
 func CumulativeCostB(turns int, x int, filteredTokens int, sp CostParams, p Pricing) float64 {
-	return CumulativeCostBWithInjectPages(turns, x, filteredTokens, 1, sp, p)
+	return CumulativeCostBWithInjectPages(turns, filteredTokens, 1, sp, p)
 }
 
 // CumulativeCostBWithInjectPages models opening a new session and injecting
@@ -166,7 +166,7 @@ func CumulativeCostB(turns int, x int, filteredTokens int, sp CostParams, p Pric
 //	each page: read(overhead + previous page tokens) + write(page tokens)
 //
 // The active conversation after setup is still overhead + filteredTokens.
-func CumulativeCostBWithInjectPages(turns int, x int, filteredTokens int, injectPages int, sp CostParams, p Pricing) float64 {
+func CumulativeCostBWithInjectPages(turns int, filteredTokens int, injectPages int, sp CostParams, p Pricing) float64 {
 	base := sp.Overhead + filteredTokens
 	total := newSessionSetupCost(filteredTokens, injectPages, sp, p)
 	extraCalls := extraCallsPerTurn(sp.K)
@@ -235,27 +235,27 @@ func ComputeCostMetrics(r *Result, overheadTokens int, p Pricing) {
 	sp := NewCostParams(*r, overheadTokens)
 	r.BreakEven = -1
 	for n := 1; n <= 200; n++ {
-		if CumulativeCostBWithInjectPages(n, r.ContextTokens, r.FilteredTokens, r.InjectPages, sp, p) < CumulativeCostA(n, r.ContextTokens, sp, p) {
+		if CumulativeCostBWithInjectPages(n, r.FilteredTokens, r.InjectPages, sp, p) < CumulativeCostA(n, r.ContextTokens, sp, p) {
 			r.BreakEven = n
 			break
 		}
 	}
 
 	cost10A := CumulativeCostA(10, r.ContextTokens, sp, p)
-	cost10B := CumulativeCostBWithInjectPages(10, r.ContextTokens, r.FilteredTokens, r.InjectPages, sp, p)
+	cost10B := CumulativeCostBWithInjectPages(10, r.FilteredTokens, r.InjectPages, sp, p)
 	if cost10A > 0 {
 		r.Saving10Pct = (cost10A - cost10B) * 100.0 / cost10A
 	}
 
 	cost100A := CumulativeCostA(100, r.ContextTokens, sp, p)
-	cost100B := CumulativeCostBWithInjectPages(100, r.ContextTokens, r.FilteredTokens, r.InjectPages, sp, p)
+	cost100B := CumulativeCostBWithInjectPages(100, r.FilteredTokens, r.InjectPages, sp, p)
 	if cost100A > 0 {
 		r.Saving100Pct = (cost100A - cost100B) * 100.0 / cost100A
 	}
 
 	r.WarmBreakEven = -1
 	for n := 1; n <= 200; n++ {
-		if CumulativeCostBWithInjectPages(n, r.ContextTokens, r.FilteredTokens, r.InjectPages, sp, p) < CumulativeCostAWarm(n, r.ContextTokens, sp, p) {
+		if CumulativeCostBWithInjectPages(n, r.FilteredTokens, r.InjectPages, sp, p) < CumulativeCostAWarm(n, r.ContextTokens, sp, p) {
 			r.WarmBreakEven = n
 			break
 		}
