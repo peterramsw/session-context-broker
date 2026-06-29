@@ -126,7 +126,7 @@ func ReadUsageLogFromPath(limit int, cmdFilter string, path string) ([]UsageEntr
 func CallerSessionIDs() map[string]bool {
 	path, err := DefaultLogPath()
 	if err != nil {
-		return map[string]bool{}
+		return make(map[string]bool)
 	}
 	return CallerSessionIDsFromPath(path)
 }
@@ -153,6 +153,9 @@ func CallerSessionIDsFromPath(path string) map[string]bool {
 		if e.Caller != "" {
 			result[e.Caller] = true
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return make(map[string]bool)
 	}
 	return result
 }

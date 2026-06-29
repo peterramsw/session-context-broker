@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/analyzer"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/claudecodec"
@@ -862,7 +863,7 @@ func writeCLIFixture(t *testing.T) (string, string) {
 
 func writeListMeta(t *testing.T, metaDir string, sid string, projectPath string, firstPrompt string) {
 	t.Helper()
-	meta := `{"session_id":"` + sid + `","project_path":"` + projectPath + `","duration_minutes":1,"user_message_count":1,"assistant_message_count":2,"first_prompt":"` + firstPrompt + `","start_time":"2026-05-28T00:00:00Z"}`
+	meta := `{"session_id":"` + sid + `","project_path":"` + projectPath + `","duration_minutes":1,"user_message_count":1,"assistant_message_count":2,"first_prompt":"` + firstPrompt + `","start_time":"` + time.Now().UTC().Format(time.RFC3339) + `"}`
 	if err := os.WriteFile(filepath.Join(metaDir, sid+".json"), []byte(meta), 0o644); err != nil {
 		t.Fatalf("write meta: %v", err)
 	}

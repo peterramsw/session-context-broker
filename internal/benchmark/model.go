@@ -41,6 +41,14 @@ func ResolveModel(model string) (ModelConfig, error) {
 	}
 }
 
+// RatioPct returns the ratio of NewContextTokens to ContextTokens as a percentage.
+func (r Result) RatioPct() float64 {
+	if r.ContextTokens == 0 {
+		return 0
+	}
+	return float64(r.NewContextTokens) / float64(r.ContextTokens) * 100
+}
+
 // Result holds per-session benchmark output.
 type Result struct {
 	ShortID          string

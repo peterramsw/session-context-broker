@@ -100,17 +100,21 @@ func loadEvents(transcriptPath string, isVerboseAgents bool, reader session.Tran
 	return events, agentIDs, nil
 }
 
+func applyInjectResult(pt *pendingTool, result *session.ToolResult) {
+	if !result.Success {
+		pt.injectSessionID = ""
+	}
+	if pt.injectSessionID != "" {
+		pt.injectTotalLines = parseTotalLines(result.Text)
+	}
+}
+
 func appendToolResult(result *session.ToolResult, pendingTools *[]pendingTool, opts FormatOptions) {
 	if result.ToolUseID != "" {
 		for i := range *pendingTools {
 			pt := &(*pendingTools)[i]
 			if pt.toolUseID == result.ToolUseID {
-				if !result.Success {
-					pt.injectSessionID = ""
-				}
-				if pt.injectSessionID != "" {
-					pt.injectTotalLines = parseTotalLines(result.Text)
-				}
+				applyInjectResult(pt, result)
 				if opts.VerboseBash && pt.name == session.ToolBash {
 					pt.summary += formatVerboseBashResult(result)
 					return
@@ -122,12 +126,7 @@ func appendToolResult(result *session.ToolResult, pendingTools *[]pendingTool, o
 	}
 	if len(*pendingTools) > 0 {
 		last := &(*pendingTools)[len(*pendingTools)-1]
-		if !result.Success {
-			last.injectSessionID = ""
-		}
-		if last.injectSessionID != "" {
-			last.injectTotalLines = parseTotalLines(result.Text)
-		}
+		applyInjectResult(last, result)
 		if opts.VerboseBash && last.name == session.ToolBash {
 			last.summary += formatVerboseBashResult(result)
 			return
@@ -261,6 +260,16 @@ func collapseCCSessionTools(tools []pendingTool) []pendingTool {
 	if len(tools) == 0 {
 		return tools
 	}
+	hasInject := false
+	for _, t := range tools {
+		if t.injectSessionID != "" {
+			hasInject = true
+			break
+		}
+	}
+	if !hasInject {
+		return tools
+	}
 	result := make([]pendingTool, 0, len(tools))
 	for i := 0; i < len(tools); i++ {
 		pt := tools[i]
@@ -268,17 +277,16 @@ func collapseCCSessionTools(tools []pendingTool) []pendingTool {
 			result = append(result, pt)
 			continue
 		}
-		first := tools[i]
 		j := i + 1
 		for j < len(tools) && tools[j].injectSessionID == pt.injectSessionID {
 			j++
 		}
 		last := tools[j-1]
 		verb := "loaded"
-		if last.ccSubcommand == "inject" {
+		if pt.ccSubcommand == "inject" {
 			verb = "injected"
 		}
-		shortID := session.ToolShortID(first.toolUseID)
+		shortID := session.ToolShortID(pt.toolUseID)
 		if last.injectTotalLines > 0 {
 			last.summary = fmt.Sprintf("(cc-session#%s: %s session %s here, %d lines omitted)", shortID, verb, last.injectSessionID, last.injectTotalLines)
 		} else {
@@ -288,6 +296,20 @@ func collapseCCSessionTools(tools []pendingTool) []pendingTool {
 		i = j - 1
 	}
 	return result
+}
+
+func flushPendingTools(pendingTools *[]pendingTool, opts FormatOptions, out io.Writer) {
+	tools := *pendingTools
+	if !opts.VerboseBash {
+		tools = collapseCCSessionTools(tools)
+	}
+	for _, pt := range tools {
+		fmt.Fprintf(out, "  %s\n", pt.summary)
+	}
+	if len(*pendingTools) > 0 {
+		fmt.Fprintln(out)
+	}
+	*pendingTools = (*pendingTools)[:0]
 }
 
 // applyPagination slices the formatted output by offset and maxLines, writing

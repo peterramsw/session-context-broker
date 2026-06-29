@@ -17,7 +17,7 @@ func PrintCompressionSection(out io.Writer, results []Result) {
 	fmt.Fprintln(out, "=== Compression ===")
 	fmt.Fprintf(out, "%-10s  %10s  %10s  %6s  %6s\n", "Session", "Context", "NewCtx", "Ratio", "Saved")
 	for _, r := range results {
-		ratio := float64(r.NewContextTokens) / float64(r.ContextTokens) * 100
+		ratio := r.RatioPct()
 		fmt.Fprintf(out, "%-10s  %10s  %10s  %5.1f%%  %.1f%%\n",
 			r.ShortID,
 			analyzer.FormatNumber(r.ContextTokens),
@@ -76,7 +76,7 @@ func printCostSection(out io.Writer, results []Result, modelName string, fields 
 		if breakEven > 0 {
 			beStr = fmt.Sprintf("turn %d", breakEven)
 		}
-		ratio := float64(r.NewContextTokens) / float64(r.ContextTokens) * 100
+		ratio := r.RatioPct()
 		fmt.Fprintf(out, "%-10s  %10s  %10s  %5.1f%%  %5.1f  %10s  %7.0f%%  %8.0f%%\n",
 			r.ShortID,
 			analyzer.FormatNumber(r.ContextTokens),

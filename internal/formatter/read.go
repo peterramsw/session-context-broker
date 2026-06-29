@@ -33,17 +33,7 @@ func renderReadEvents(events []session.Event, agentIDs map[string]bool, opts For
 	seenSkills := make(map[string]bool)
 
 	flush := func() {
-		tools := pendingTools
-		if !opts.VerboseBash {
-			tools = collapseCCSessionTools(tools)
-		}
-		for _, pt := range tools {
-			fmt.Fprintf(out, "  %s\n", pt.summary)
-		}
-		if len(pendingTools) > 0 {
-			fmt.Fprintln(out)
-		}
-		pendingTools = pendingTools[:0]
+		flushPendingTools(&pendingTools, opts, out)
 	}
 
 	for _, event := range events {

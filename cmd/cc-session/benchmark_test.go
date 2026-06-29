@@ -163,7 +163,7 @@ func TestRunBenchmark_WhenSessionHasAPIUsage_ThenUsesTokenCountingAPIForNewConte
 
 	var stdout, stderr bytes.Buffer
 	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
-	if err := runBenchmark([]string{"--days", "365", "--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
+	if err := runBenchmark([]string{"--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
 		t.Fatalf("runBenchmark returned error: %v", err)
 	}
 
@@ -223,7 +223,7 @@ func TestRunBenchmark_WhenSessionHasNoAPIUsage_ThenSkipsSession(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
-	if err := runBenchmark([]string{"--days", "365", "--n", "1", "--min-kb", "0"}, &stdout, &stderr, store, testReader); err != nil {
+	if err := runBenchmark([]string{"--n", "1", "--min-kb", "0"}, &stdout, &stderr, store, testReader); err != nil {
 		t.Fatalf("runBenchmark returned error: %v", err)
 	}
 
@@ -276,7 +276,7 @@ func TestRunBenchmark_WhenTopCandidateIsSkipped_ThenNCountsProcessedResults(t *t
 
 	var stdout, stderr bytes.Buffer
 	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
-	if err := runBenchmark([]string{"--days", "365", "--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
+	if err := runBenchmark([]string{"--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
 		t.Fatalf("runBenchmark returned error: %v", err)
 	}
 
@@ -323,7 +323,7 @@ func TestRunBenchmark_GivenSonnetModel_ThenUsesSonnetTokenCounterModel(t *testin
 
 	var stdout, stderr bytes.Buffer
 	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
-	if err := runBenchmark([]string{"--days", "365", "--n", "1", "--min-kb", "0", "--model", "sonnet"}, &stdout, &stderr, store, testReader); err != nil {
+	if err := runBenchmark([]string{"--n", "1", "--min-kb", "0", "--model", "sonnet"}, &stdout, &stderr, store, testReader); err != nil {
 		t.Fatalf("runBenchmark returned error: %v", err)
 	}
 
@@ -370,7 +370,7 @@ func TestRunBenchmark_GivenTwoValidSessions_ThenReusesTokenCounter(t *testing.T)
 
 	var stdout, stderr bytes.Buffer
 	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
-	if err := runBenchmark([]string{"--days", "365", "--n", "2", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
+	if err := runBenchmark([]string{"--n", "2", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
 		t.Fatalf("runBenchmark returned error: %v", err)
 	}
 
@@ -421,7 +421,7 @@ func TestRunBenchmark_GivenNoAPIFlag_ThenSkipsAPIAndEstimatesFilteredTokensWithC
 
 	var stdout, stderr bytes.Buffer
 	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
-	if err := runBenchmark([]string{"--days", "365", "--no-api", "--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
+	if err := runBenchmark([]string{"--no-api", "--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
 		t.Fatalf("runBenchmark returned error: %v", err)
 	}
 
@@ -495,7 +495,7 @@ func TestRunBenchmark_GivenNoAPIFlagAndToolUse_ThenToolIOPerCallUsesCharsPerToke
 
 	var stdout, stderr bytes.Buffer
 	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
-	if err := runBenchmark([]string{"--days", "365", "--no-api", "--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
+	if err := runBenchmark([]string{"--no-api", "--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
 		t.Fatalf("runBenchmark returned error: %v", err)
 	}
 
@@ -575,7 +575,7 @@ func TestRunBenchmark_GivenFractionalK_ThenDerivesPromptFromFractionalCallsPerTu
 
 	var stdout, stderr bytes.Buffer
 	store := parser.Store{ProjectsDir: filepath.Join(root, "projects"), SessionMetaDir: metaDir}
-	if err := runBenchmark([]string{"--days", "365", "--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
+	if err := runBenchmark([]string{"--n", "1", "--min-kb", "0", "--overhead", "40000"}, &stdout, &stderr, store, testReader); err != nil {
 		t.Fatalf("runBenchmark returned error: %v", err)
 	}
 

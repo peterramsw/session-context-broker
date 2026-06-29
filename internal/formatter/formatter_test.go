@@ -874,6 +874,18 @@ func TestParseCCSessionCommand(t *testing.T) {
 			wantSub:     "inject",
 			wantSession: "16d06326",
 		},
+		{
+			name:        "given flag as session id then returns empty",
+			cmd:         "cc-session read -h",
+			wantSub:     "",
+			wantSession: "",
+		},
+		{
+			name:        "given flag with value as session id then returns empty",
+			cmd:         "cc-session read -max-lines 200",
+			wantSub:     "",
+			wantSession: "",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
