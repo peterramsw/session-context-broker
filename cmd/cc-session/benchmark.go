@@ -81,10 +81,6 @@ func runBenchmark(args []string, out io.Writer, errOut io.Writer, store parser.S
 		candidates = append(candidates, candidate{entry: entry, fileSize: info.Size(), path: resolved.Path})
 	}
 
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].fileSize > candidates[j].fileSize
-	})
-
 	if len(candidates) == 0 {
 		fmt.Fprintln(out, "No sessions matched the filters.")
 		return nil
@@ -93,9 +89,6 @@ func runBenchmark(args []string, out io.Writer, errOut io.Writer, store parser.S
 	var results []bm.Result
 	var tokenCounter countTokensFunc
 	for _, c := range candidates {
-		if len(results) >= *maxN {
-			break
-		}
 		events, err := reader.ReadAll(c.path)
 		if err != nil {
 			continue
@@ -196,6 +189,13 @@ func runBenchmark(args []string, out io.Writer, errOut io.Writer, store parser.S
 		}
 		bm.ComputeCostMetrics(&br, overheadToks, p)
 		results = append(results, br)
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].ContextTokens > results[j].ContextTokens
+	})
+	if len(results) > *maxN {
+		results = results[:*maxN]
 	}
 
 	fmt.Fprintln(out)

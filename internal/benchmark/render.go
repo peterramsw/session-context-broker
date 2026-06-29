@@ -15,12 +15,14 @@ func PrintCompressionSection(out io.Writer, results []Result) {
 		return
 	}
 	fmt.Fprintln(out, "=== Compression ===")
-	fmt.Fprintf(out, "%-10s  %10s  %10s  %6s\n", "Session", "Context", "NewCtx", "Saved")
+	fmt.Fprintf(out, "%-10s  %10s  %10s  %6s  %6s\n", "Session", "Context", "NewCtx", "Ratio", "Saved")
 	for _, r := range results {
-		fmt.Fprintf(out, "%-10s  %10s  %10s  %.1f%%\n",
+		ratio := float64(r.NewContextTokens) / float64(r.ContextTokens) * 100
+		fmt.Fprintf(out, "%-10s  %10s  %10s  %5.1f%%  %.1f%%\n",
 			r.ShortID,
 			analyzer.FormatNumber(r.ContextTokens),
 			analyzer.FormatNumber(r.NewContextTokens),
+			ratio,
 			r.SavedPct,
 		)
 	}
@@ -65,8 +67,8 @@ func PrintWarmCostSummary(out io.Writer, results []Result, p Pricing, modelName 
 
 func printCostSection(out io.Writer, results []Result, modelName string, fields func(Result) (int, float64, float64), titleFmt string) {
 	fmt.Fprintf(out, titleFmt, modelName)
-	fmt.Fprintf(out, "%-10s  %10s  %10s  %5s  %10s  %8s  %9s\n",
-		"Session", "Context", "NewCtx", "K", "Break-even", "10-turn", "100-turn")
+	fmt.Fprintf(out, "%-10s  %10s  %10s  %6s  %5s  %10s  %8s  %9s\n",
+		"Session", "Context", "NewCtx", "Ratio", "K", "Break-even", "10-turn", "100-turn")
 
 	for _, r := range results {
 		breakEven, saving10, saving100 := fields(r)
@@ -74,10 +76,12 @@ func printCostSection(out io.Writer, results []Result, modelName string, fields 
 		if breakEven > 0 {
 			beStr = fmt.Sprintf("turn %d", breakEven)
 		}
-		fmt.Fprintf(out, "%-10s  %10s  %10s  %5.1f  %10s  %7.0f%%  %8.0f%%\n",
+		ratio := float64(r.NewContextTokens) / float64(r.ContextTokens) * 100
+		fmt.Fprintf(out, "%-10s  %10s  %10s  %5.1f%%  %5.1f  %10s  %7.0f%%  %8.0f%%\n",
 			r.ShortID,
 			analyzer.FormatNumber(r.ContextTokens),
 			analyzer.FormatNumber(r.NewContextTokens),
+			ratio,
 			r.CallsPerTurn,
 			beStr,
 			math.Round(saving10),
