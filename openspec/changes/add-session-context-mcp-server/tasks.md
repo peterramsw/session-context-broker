@@ -3,13 +3,21 @@
 - [x] 1.1 Extract provider resolution, inspect, filter, stats, and handoff policy into shared internal broker/core packages
 - [x] 1.2 Keep CLI command files limited to argument parsing and output formatting
 - [x] 1.3 Add tests proving CLI and core outputs match for the same sessions
+- [x] 1.4 Inject a `HeaderScanner` into the broker store so `list_sessions` scans JSONL transcript headers when session-meta is sparse (fixed in `broker.New`)
 
-## 2. MCP Server
+## 2. MCP Server (official SDK)
 
-- [x] 2.1 Evaluate `modelcontextprotocol/go-sdk`, falling back to `mark3labs/mcp-go` only if necessary
-- [x] 2.2 Implement `cc-session serve-mcp`
-- [x] 2.3 Expose `list_sessions`, `inspect_session`, `filter_session`, `create_handoff`, `get_handoff`, `search_session`, `expand_evidence`, `compare_context_size`, and `verify_workspace`
-- [x] 2.4 Add stdio server smoke test and tool schema tests
+- [ ] 2.1 Adopt the official `modelcontextprotocol/go-sdk` as the MCP transport/runtime and remove the hand-rolled JSON-RPC loop in `serve_mcp.go` (the interim newline-delimited framing fix is a stopgap until this lands)
+- [ ] 2.2 Reimplement `cc-session serve-mcp` on the SDK, keeping `internal/broker` as the tool backend so CLI and MCP still share core logic
+- [ ] 2.3 Expose `list_sessions`, `inspect_session`, `filter_session`, `create_handoff`, `get_handoff`, `search_session`, `expand_evidence`, `compare_context_size`, and `verify_workspace` with **typed** input schemas (replace `additionalProperties: true`)
+- [ ] 2.4 Add an end-to-end test that drives the server as a real MCP client (initialize → tools/list → tools/call) over newline-delimited stdio and asserts parsed JSON-RPC responses — not substring matches on self-framed output
+- [ ] 2.5 Structure the transport layer so a future Streamable HTTP transport can be added without changing tool handlers
+
+## 2b. Tool defects found in live MCP testing
+
+- [ ] 2b.1 `inspect_session` returns empty metadata (event/user/assistant/tool counts and line count all zero) because `ResolveFiltered` never populates `SessionMetadata`; populate it so inspect reports real counts
+- [ ] 2b.2 Resolve session-id prefixes consistently across every tool; `expand_evidence` uses the raw argument as a path segment, so an 8-char prefix builds a wrong evidence-store path instead of resolving to the full session id
+- [ ] 2b.3 `list_sessions` ignores the `limit` argument and always returns the default 20
 
 ## 3. Workspace Verification
 

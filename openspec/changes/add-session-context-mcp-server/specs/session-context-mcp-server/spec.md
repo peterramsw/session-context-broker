@@ -1,11 +1,16 @@
 ## ADDED Requirements
 
 ### Requirement: Stdio MCP server exposing session context tools
-The system SHALL provide `cc-session serve-mcp`, reachable over stdio, exposing session listing, inspection, filtering, handoff, search, evidence expansion, context-size comparison, and workspace verification tools.
+The system SHALL provide `cc-session serve-mcp`, reachable over stdio, exposing session listing, inspection, filtering, handoff, search, evidence expansion, context-size comparison, and workspace verification tools. The server SHALL conform to the MCP stdio transport (newline-delimited JSON-RPC) and advertise each tool with a typed input schema.
 
 #### Scenario: Server advertises tools
 - **WHEN** an MCP client connects over stdio
-- **THEN** it SHALL be able to list the supported tools and input schemas
+- **THEN** it SHALL be able to list the supported tools, each with a typed input schema describing its arguments
+
+#### Scenario: Protocol conformance verified by a real client
+- **WHEN** an MCP client performs the initialize → tools/list → tools/call handshake over stdio
+- **THEN** every message SHALL be exchanged as newline-delimited JSON-RPC per the MCP stdio transport
+- **AND** conformance SHALL be proven by an end-to-end client round-trip that parses each response as JSON-RPC, not by substring matching on self-framed output
 
 ### Requirement: MCP and CLI share core logic
 The MCP server SHALL call the same internal core packages as the CLI and SHALL NOT duplicate provider/session/handoff logic or shell out to the CLI.
