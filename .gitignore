@@ -5,3 +5,12 @@ bin/
 /sessions
 coverage.out
 dist/
+
+# local secrets / runtime config - never commit real credentials
+config.json
+*.local.json
+.env
+.env.*
+
+# local CodeGraph index
+.codegraph/
