@@ -227,9 +227,9 @@ func TestLoadSessionContextFromPath_GivenLegacyQwenConfig_ThenMapsToLocalLLM(t *
 	dir := t.TempDir()
 	path := writeConfigFile(t, dir, map[string]any{
 		"qwen": map[string]any{
-			"base_url": "http://192.168.52.30:32080/v1",
+			"base_url": "http://127.0.0.1:8080/v1",
 			"api_key":  "legacy-key",
-			"model":    "q36-35b-general/ornith",
+			"model":    "local-model",
 		},
 	})
 
