@@ -83,6 +83,7 @@
 - [ ] 12.2 Write thin `skills/claude-code/SKILL.md`, `skills/codex/SKILL.md`, and `skills/antigravity/SKILL.md` wrappers that reference the shared content, matching each platform's actual skill-installation convention (Claude Code: `allowed-tools` frontmatter, installs to `~/.claude/skills/`; Antigravity 2.0: `tools` frontmatter referencing MCP tool names, installs to `~/.gemini/skills/`; Codex: confirm its actual convention during this task rather than assuming)
 - [ ] 12.3 Document Antigravity 2.0's MCP config (`~/.gemini/config/mcp_config.json`) and Skill install path in `docs/skills.md` and `docs/mcp-tools.md`, verified against this machine's actual installed Antigravity version
 - [ ] 12.4 Manually verify the Claude Code skill installs (to `~/.claude/skills/`) and activates correctly; manually verify the Antigravity skill installs (to `~/.gemini/skills/`) and is selectable
+- [ ] 12.5 Update install scripts to offer install-time client selection for Claude Code, Codex, and Antigravity, showing already-installed targets as checked/selected by default, plus a non-interactive `--clients {all|none|claude,codex,antigravity}` path; normal setup must not require a separate `cc-session init`
 
 ## 13. Config & documentation
 

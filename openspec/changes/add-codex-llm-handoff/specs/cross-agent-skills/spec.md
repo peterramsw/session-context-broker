@@ -22,6 +22,21 @@ The system SHALL provide `skills/claude-code/SKILL.md`, `skills/codex/SKILL.md`,
 - **WHEN** both a Claude Code skill and an Antigravity skill are installed on the same machine
 - **THEN** each SHALL live in its own platform-specific directory (`~/.claude/skills/...` vs `~/.gemini/skills/...`) so the shared `SKILL.md` filename never causes one platform's install to overwrite the other's
 
+### Requirement: Installer selects client integrations during install
+The installer SHALL be the normal onboarding surface for Skill/MCP client wiring. It SHALL offer Claude Code, Codex, and Antigravity client targets during install, show already-installed or already-configured targets as selected/checked by default, and support non-interactive selection (`all`, `none`, or a comma-separated client list) for repeatable installs. Normal setup SHALL NOT require a separate post-install initialization command.
+
+#### Scenario: Existing targets are shown as checked
+- **WHEN** the installer runs interactively on a machine where the Claude Code skill is already installed and the Codex/Antigravity integrations are not installed
+- **THEN** the installer SHALL display Claude Code as already selected/checked and SHALL leave Codex/Antigravity unselected unless the user chooses them
+
+#### Scenario: Non-interactive client selection is repeatable
+- **WHEN** the installer is run with a non-interactive client selector such as `--clients claude,codex`
+- **THEN** it SHALL install/update only the selected client integrations and SHALL NOT prompt for Antigravity or Local LLM configuration
+
+#### Scenario: No separate init is required
+- **WHEN** installation completes with one or more selected client integrations
+- **THEN** the selected Skills/MCP client wiring SHALL be ready for that client without requiring the user to run a separate `cc-session init`
+
 ### Requirement: Resume workflow never trusts unverified claims
 The Resume workflow SHALL: find the prior session, load or create its handoff, present the prior objective/confirmed items/open items/blockers/next steps to the user, then call `verify_workspace` and compare its repository/branch/commit/uncommitted-changes state against the handoff before treating any of the handoff's completion claims (tests passed, deployment completed, migration applied, rollback completed) as true. If current work depends on such a claim, the workflow SHALL expand the relevant evidence or prompt re-verification before proceeding, and it SHALL NOT re-adopt an option already recorded as rejected or superseded.
 
