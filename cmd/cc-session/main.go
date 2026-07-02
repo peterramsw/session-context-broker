@@ -1,5 +1,6 @@
-// Package main is the CLI entry point for the Claude session reader.
-// Subcommands: list, read, context, stats, audit, expand, usage, inject.
+// Package main is the CLI entry point for the session context broker.
+// Claude Code remains the default provider; Codex support is exposed through
+// provider-aware commands as the fork grows into a cross-agent tool.
 package main
 
 import (
@@ -49,6 +50,10 @@ func main() {
 		return
 	case "list":
 		cmdList(os.Args[2:], reader)
+	case "inspect":
+		cmdInspect(os.Args[2:], reader)
+	case "filter":
+		cmdFilter(os.Args[2:], reader)
 	case "read":
 		cmdRead(os.Args[2:], reader)
 	case "context":
@@ -77,14 +82,16 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  list      列出最近的 session")
+	fmt.Fprintln(os.Stderr, "  inspect   顯示 session metadata / stats")
+	fmt.Fprintln(os.Stderr, "  filter    輸出 deterministic filtered transcript")
 	fmt.Fprintln(os.Stderr, "  read      完整對話 + tool call 一行摘要")
 	fmt.Fprintln(os.Stderr, "  context   精簡注入格式（帶 metadata header）")
 	fmt.Fprintln(os.Stderr, "  stats     字元與 token 分佈統計")
 	fmt.Fprintln(os.Stderr, "  audit     檢視被過濾的內容取樣")
 	fmt.Fprintln(os.Stderr, "  expand    展開特定 tool call 完整內容")
 	fmt.Fprintln(os.Stderr, "  usage     CLI 使用紀錄")
-	fmt.Fprintln(os.Stderr, "  inject      分頁注入 session 到 context")
-	fmt.Fprintln(os.Stderr, "  benchmark   掃描近期 session，計算壓縮率與成本比較")
+	fmt.Fprintln(os.Stderr, "  inject    分頁注入 session 到 context")
+	fmt.Fprintln(os.Stderr, "  benchmark 掃描近期 session，計算壓縮率與成本比較")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run 'cc-session <command> -h' for command-specific flags.")
 }

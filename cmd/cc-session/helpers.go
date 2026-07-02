@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
+	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/session"
 )
 
 func exitOnError(err error) {
@@ -29,6 +30,31 @@ var reorderBoolFlags = map[string]bool{
 	"verbose-commands": true,
 	"no-tokens":        true,
 	"reset":            true,
+}
+
+const (
+	providerClaudeCode  = session.ProviderClaudeCode
+	providerCodex       = session.ProviderCodex
+	providerAntigravity = session.ProviderAntigravity
+	providerAll         = "all"
+	providerAuto        = "auto"
+)
+
+func normalizeProvider(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "", "claude", "claude-code", "claude_code":
+		return providerClaudeCode
+	case "codex":
+		return providerCodex
+	case "antigravity", "angravity":
+		return providerAntigravity
+	case "all":
+		return providerAll
+	case "auto":
+		return providerAuto
+	default:
+		return strings.ToLower(strings.TrimSpace(provider))
+	}
 }
 
 // reorderArgs moves flags before positional args so Go's flag package

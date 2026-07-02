@@ -1,6 +1,6 @@
 # Codex original-style stats baseline - 2026-07-02
 
-Purpose: establish a pre-Qwen comparison baseline for real Codex session files using the same policy as the original `cc-session stats -no-tokens` workflow: keep user/assistant natural-language text, replace tool calls/results with deterministic one-line summaries, and count dropped tool I/O / system noise separately.
+Purpose: establish a pre-Local LLM comparison baseline for real Codex session files using the same policy as the original `cc-session stats -no-tokens` workflow: keep user/assistant natural-language text, replace tool calls/results with deterministic one-line summaries, and count dropped tool I/O / system noise separately.
 
 The upstream `cc-session stats` command cannot read Codex sessions yet, so these measurements were produced with a one-off parser over `C:\Users\peter\.codex\sessions\**\rollout-*.jsonl`. Raw session content was not copied into this artifact.
 
@@ -48,8 +48,8 @@ The upstream `cc-session stats` command cannot read Codex sessions yet, so these
 - `session_meta`, `turn_context`, `developer` messages, `event_msg` status stream, and encrypted `reasoning` payloads are counted as raw noise dropped from the deterministic filtered view.
 - The future implemented Codex adapter should reproduce this policy with tests, then replace this one-off measurement with CLI/MCP-produced stats.
 
-## Notes For Qwen Comparison
+## Notes For Local LLM Comparison
 
-- Use the same two Codex session IDs when comparing future Qwen handoff output.
-- Compare deterministic filtered size from this baseline against Qwen handoff JSON/Markdown size, validation warnings/conflicts, claims requiring re-verification, and evidence expansion needed during resume.
-- The expected Qwen win is not raw compression ratio alone. It should reduce resume effort by turning the filtered transcript into structured, evidence-referenced state.
+- Use the same two Codex session IDs when comparing future Local LLM handoff output.
+- Compare deterministic filtered size from this baseline against Local LLM handoff JSON/Markdown size, validation warnings/conflicts, claims requiring re-verification, and evidence expansion needed during resume.
+- The expected Local LLM win is not raw compression ratio alone. It should reduce resume effort by turning the filtered transcript into structured, evidence-referenced state.

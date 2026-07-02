@@ -57,8 +57,15 @@ The system SHALL provide a `internal/codexcodec` adapter implementing `SessionPr
 - **WHEN** the Codex adapter encounters an event shape it does not recognize
 - **THEN** it SHALL normalize it as `event_type: "unknown"` with preserved content, consistent with the malformed/unknown-input requirement above, rather than failing the whole parse
 
+### Requirement: Antigravity session adapter target
+The system SHALL treat Antigravity as a first-class provider target alongside Claude Code and Codex. If the local Antigravity session format is not yet verified, the provider SHALL fail with an actionable "format not implemented yet" error rather than being omitted from configuration, documentation, or user-facing provider lists.
+
+#### Scenario: Antigravity is visible even before parsing ships
+- **WHEN** a user lists supported providers
+- **THEN** `antigravity` SHALL appear as a recognized provider target, and any unavailable local parsing support SHALL be reported as a clear implementation status rather than as an unknown provider
+
 ### Requirement: Session discovery across platforms and overrides
-The system SHALL discover Claude Code and Codex session roots by checking, in order: explicit config file entries, environment variable overrides (`CLAUDE_SESSION_ROOTS`, `CODEX_SESSION_ROOTS`), and common platform-default locations for Windows and Linux. If no sources can be found, the system SHALL return a clear, actionable error describing how to configure a root.
+The system SHALL discover Claude Code, Codex, and Antigravity session roots by checking, in order: explicit config file entries, environment variable overrides (`CLAUDE_SESSION_ROOTS`, `CODEX_SESSION_ROOTS`, `ANTIGRAVITY_SESSION_ROOTS`), and common platform-default locations for Windows and Linux. If no sources can be found, the system SHALL return a clear, actionable error describing how to configure a root.
 
 #### Scenario: Environment variable override takes effect
 - **WHEN** `CODEX_SESSION_ROOTS` is set to a specific directory

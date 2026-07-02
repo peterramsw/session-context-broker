@@ -11,7 +11,7 @@ The system SHALL detect, via deterministic pattern matching (not an LLM call), a
 Redaction SHALL be applied, by default, before any content is sent to the local LLM distiller, and to all filtered-transcript, handoff, and evidence-expansion output. Unredacted output SHALL only be produced when explicitly enabled via configuration.
 
 #### Scenario: Distiller never sees an unredacted secret by default
-- **WHEN** a filtered transcript containing a detected secret is prepared for the Qwen distiller
+- **WHEN** a filtered transcript containing a detected secret is prepared for the Local LLM distiller
 - **THEN** the secret SHALL already be masked before the distiller request is constructed
 
 #### Scenario: Evidence expand masks secrets by default
@@ -34,4 +34,4 @@ The system SHALL NOT transmit session data (redacted or not) to any network dest
 
 #### Scenario: No telemetry call is made
 - **WHEN** any command in this feature runs, including handoff generation
-- **THEN** no network request SHALL be made to any host other than the configured `qwen.base_url` (and, for MCP/CLI operations that don't call the distiller, no network request SHALL be made at all)
+- **THEN** no network request SHALL be made to any host other than the configured `local_llm.base_url` (and, for MCP/CLI operations that don't call the distiller, no network request SHALL be made at all)

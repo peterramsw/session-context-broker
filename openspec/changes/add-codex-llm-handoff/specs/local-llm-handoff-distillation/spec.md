@@ -1,18 +1,22 @@
 ## ADDED Requirements
 
-### Requirement: Configurable OpenAI-compatible endpoint
-The distiller SHALL call a locally-configured OpenAI-compatible chat completions endpoint, with base URL, API key (optionally empty), model name, and timeout all read from configuration/environment — never hardcoded.
+### Requirement: Optional configurable OpenAI-compatible endpoint
+The distiller SHALL be disabled unless Local LLM handoff generation is explicitly enabled. When enabled, it SHALL call a locally-configured OpenAI-compatible chat completions endpoint, with base URL, API key (optionally empty), model name, and timeout all read from configuration/environment — never hardcoded.
+
+#### Scenario: No endpoint still supports deterministic workflows
+- **WHEN** `local_llm.enabled` is false or `local_llm.base_url` is unset
+- **THEN** deterministic `list`, `inspect`, `filter`, `search`, `expand`, and context-size comparison workflows SHALL still succeed without making any Local LLM request
 
 #### Scenario: Empty API key is accepted for an unauthenticated local endpoint
-- **WHEN** `qwen.api_key` is empty
-- **THEN** the distiller SHALL still make requests to `qwen.base_url` successfully, omitting or emptying the auth header rather than failing
+- **WHEN** Local LLM handoff generation is enabled and `local_llm.api_key` is empty
+- **THEN** the distiller SHALL still make requests to `local_llm.base_url` successfully, omitting or emptying the auth header rather than failing
 
 ### Requirement: Restricted distiller input
 The distiller's prompt SHALL consist only of the filtered transcript, evidence metadata, the handoff JSON schema, and explicit extraction rules. It SHALL NOT include the unfiltered raw session unless the caller explicitly enables a debug mode.
 
 #### Scenario: Raw session is excluded by default
 - **WHEN** a handoff is generated without debug mode enabled
-- **THEN** the request sent to the Qwen endpoint SHALL NOT contain the raw/unfiltered session content
+- **THEN** the request sent to the local LLM endpoint SHALL NOT contain the raw/unfiltered session content
 
 ### Requirement: Handoff schema conformance
 The distiller SHALL produce JSON conforming to the handoff schema, including `schema_version`, `session`, `objective`, `confirmed_decisions`, `rejected_or_superseded`, `implementation_state`, `verification` (`passed`/`failed`/`not_run`/`warnings`), `deployment`, `known_blockers`, `unresolved_questions`, `next_actions`, `user_corrections`, `claims_requiring_reverification`, `workflow_improvement_candidates`, and `validation` (`warnings`/`conflicts`).
@@ -54,7 +58,7 @@ If the distiller's raw output is not valid JSON, the system SHALL attempt exactl
 When the filtered transcript exceeds the configured context budget, the system SHALL split it into ordered chunks along heuristic phase boundaries (e.g. requirement/planning/design/implementation/debugging/testing/deployment/rollback/final-report) without reordering events, distill each chunk independently, and merge the partial results while preserving evidence references and event order.
 
 #### Scenario: Oversized transcript is chunked, not truncated
-- **WHEN** a filtered transcript exceeds `qwen.max_context`
+- **WHEN** a filtered transcript exceeds `local_llm.max_context`
 - **THEN** the system SHALL chunk it rather than dropping its earliest or latest content outright
 
 #### Scenario: Merge does not invent evidence

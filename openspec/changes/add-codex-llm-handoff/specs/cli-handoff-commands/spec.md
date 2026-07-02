@@ -18,9 +18,9 @@ CLI subcommands SHALL call the same internal packages that back the MCP tools; c
 - **WHEN** a defect in evidence expansion or handoff validation is fixed in the shared internal package
 - **THEN** both `cc-session expand`/`cc-session handoff` and the corresponding MCP tools SHALL reflect the fix without separate patches
 
-### Requirement: New commands work without a Qwen endpoint
-`list`, `inspect`, `filter`, `search`, `expand`, `stats`, `verify-workspace`, and `serve-mcp` (for tools other than `create_handoff`/`get_handoff`) SHALL function correctly with no Qwen endpoint configured or reachable.
+### Requirement: New commands work without a Local LLM endpoint
+`list`, `inspect`, `filter`, `search`, `expand`, `stats`, `verify-workspace`, and `serve-mcp` (for tools other than `create_handoff`/`get_handoff`) SHALL function correctly with no Local LLM endpoint configured or reachable.
 
 #### Scenario: Filter and search work offline
-- **WHEN** `qwen.base_url` is unset
+- **WHEN** `local_llm.base_url` is unset
 - **THEN** `cc-session filter <session>` and `cc-session search <session> "<query>"` SHALL still succeed

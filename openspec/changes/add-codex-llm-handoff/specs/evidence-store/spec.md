@@ -44,5 +44,5 @@ The evidence store SHALL be safe to read and write from multiple concurrent OS p
 - **THEN** exactly one SHALL perform the write and the other SHALL either wait briefly and reuse the result or receive a clear "in progress" error, and the resulting `handoff.json` SHALL be well-formed either way
 
 #### Scenario: A slow LLM call in one process does not block other processes' unrelated work
-- **WHEN** one process is waiting on a slow/hung Qwen distiller call for session A
+- **WHEN** one process is waiting on a slow/hung Local LLM distiller call for session A
 - **THEN** another process performing `list_sessions`, `get_handoff`, or a handoff for a different session B SHALL NOT be blocked by that in-flight call

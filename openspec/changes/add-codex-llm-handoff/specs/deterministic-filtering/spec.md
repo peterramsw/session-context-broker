@@ -3,8 +3,8 @@
 ### Requirement: No-LLM first-pass compression
 The first-pass compression of a normalized session into a filtered transcript SHALL be entirely deterministic (no LLM call), extending the existing `internal/summarizer`/`internal/analyzer` logic rather than replacing it.
 
-#### Scenario: Filtering works with no Qwen endpoint configured
-- **WHEN** `qwen.base_url` is unset or unreachable
+#### Scenario: Filtering works with no local LLM endpoint configured
+- **WHEN** `local_llm.base_url` is unset or unreachable
 - **THEN** `cc-session filter`/`filter_session` SHALL still successfully produce a filtered transcript
 
 ### Requirement: Guaranteed retention of risk and decision signals

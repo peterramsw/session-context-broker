@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/analyzer"
+	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/codexcodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/session"
 )
@@ -20,8 +21,16 @@ func runStats(args []string, out io.Writer, errOut io.Writer, store parser.Store
 	fs := flag.NewFlagSet("stats", flag.ContinueOnError)
 	fs.SetOutput(errOut)
 	isNoTokens := fs.Bool("no-tokens", false, "skip token counting")
+	provider := fs.String("provider", providerClaudeCode, "session provider: claude_code or codex")
 	if err := fs.Parse(reorderArgs(args)); err != nil {
 		return err
+	}
+
+	if normalizeProvider(*provider) == providerCodex {
+		return runCodexStats(fs, out, errOut, *isNoTokens)
+	}
+	if normalizeProvider(*provider) != providerClaudeCode {
+		return fmt.Errorf("stats provider %q is not implemented", *provider)
 	}
 
 	resolved, err := resolveSession(fs, store)
@@ -93,6 +102,39 @@ func runStats(args []string, out io.Writer, errOut io.Writer, store parser.Store
 		}
 	}
 
+	analyzer.RenderStats(out, errOut, result, opts)
+	return nil
+}
+
+func runCodexStats(fs *flag.FlagSet, out io.Writer, errOut io.Writer, isNoTokens bool) error {
+	if fs.NArg() < 1 {
+		return fmt.Errorf("session_id is required")
+	}
+	codec := codexcodec.Codec{}
+	ref, err := codec.Resolve(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	events, err := codec.ReadAll(ref.Path)
+	if err != nil {
+		return fmt.Errorf("parsing Codex session: %w", err)
+	}
+	result := analyzer.ComputeStats(events)
+	info, _ := os.Stat(ref.Path)
+	fileSize := float64(0)
+	if info != nil {
+		fileSize = float64(info.Size()) / 1024.0
+	}
+	opts := analyzer.RenderOptions{
+		SessionID:    session.ShortID(ref.ID, 8),
+		TranscriptKB: fileSize,
+		SkipTokens:   isNoTokens,
+		HasAPIData:   false,
+	}
+	if !isNoTokens {
+		fmt.Fprintln(errOut, "warning: Codex token counting is not implemented; use -no-tokens for character-only stats")
+		opts.SkipTokens = true
+	}
 	analyzer.RenderStats(out, errOut, result, opts)
 	return nil
 }
