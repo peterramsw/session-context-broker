@@ -1,12 +1,16 @@
-# cc-session-reader / session-context-broker
+# session-context-broker
 
-Fork of `Mapleeeeeeeeeee/cc-session-reader` that preserves the upstream deterministic Claude Code session reader and extends it into a cross-agent session context broker.
-
-Supported targets:
-
-- Claude Code
-- Codex
-- Google Antigravity standalone app brain store
+> **A fork of [`Mapleeeeeeeeeee/cc-session-reader`](https://github.com/Mapleeeeeeeeeee/cc-session-reader)** (Apache-2.0).
+> Upstream is a deterministic **Claude Code** session reader that compresses transcripts so past sessions can be reused cheaply. This fork keeps that core intact and extends it into a cross-agent **session context broker**.
+>
+> **What this fork adds on top of upstream:**
+> - **More session sources** — Codex CLI and Google Antigravity standalone-app sessions alongside Claude Code, behind one normalized provider adapter (upstream is Claude Code only).
+> - **Optional local-LLM handoff distillation** — distill a filtered transcript into a structured, evidence-referenced `handoff.json` via an OpenAI-compatible local endpoint. Optional by design: without a local LLM you still get filtered, evidence-backed artifacts.
+> - **Evidence store** — filtered output, evidence index, and handoff artifacts persisted under `storage_root`, with on-demand evidence expansion.
+> - **MCP server** — `cc-session serve-mcp` exposes the broker to Claude Code, Codex, and Antigravity as tools.
+> - **Cross-agent skills** — installable resume / close / review-history workflows.
+>
+> Upstream CLI behavior (`list`, `read`, `context`, `inject`, `stats`, `expand`, `audit`) is preserved, and the project stays licensed under Apache-2.0.
 
 Local LLM handoff distillation is optional. Users without a Local LLM can still list, inspect, filter, search, and create filtered evidence-backed handoff artifacts.
 
