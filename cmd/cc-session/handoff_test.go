@@ -118,6 +118,30 @@ func TestRunHandoff_GivenAlwaysLLMAndNoLocalLLMConfig_ThenErrorsAfterFilteredWri
 	}
 }
 
+func TestRunHandoff_GivenAntigravitySessionAndLLMNever_ThenWritesFiltered(t *testing.T) {
+	storageRoot := t.TempDir()
+	t.Setenv("ANTIGRAVITY_SESSION_ROOTS", filepath.Join("..", "..", "internal", "antigravitycodec", "testdata"))
+
+	var stdout, stderr bytes.Buffer
+	err := runHandoff(
+		[]string{"--provider", "antigravity", "--llm", "never", "--out", storageRoot, "--force", "antigravity-standalone"},
+		&stdout,
+		&stderr,
+		parser.Store{},
+		testReader,
+	)
+	if err != nil {
+		t.Fatalf("runHandoff returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "Provider: antigravity") || !strings.Contains(got, "Mode: filtered") {
+		t.Fatalf("stdout missing Antigravity filtered summary:\n%s", got)
+	}
+	if _, err := os.Stat(filepath.Join(storageRoot, "antigravity", "antigravity-standalone-redacted", "filtered.md")); err != nil {
+		t.Fatalf("filtered.md was not written: %v", err)
+	}
+}
+
 func writeMockHandoffResponse(t *testing.T, w http.ResponseWriter) {
 	t.Helper()
 	content := `{

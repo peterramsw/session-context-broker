@@ -10,9 +10,9 @@ The system SHALL define a `SessionProvider` interface (`Name`, `Discover`, `Insp
 ### Requirement: Normalized cross-provider event schema
 The system SHALL normalize every parsed event from any provider into a single `SessionEvent` shape containing `event_id`, `session_id`, `provider`, `timestamp`, `sequence`, `role`, `event_type`, `content`, a `tool` sub-object (`call_id`, `name`, `arguments`, `result`, `stdout`, `stderr`, `exit_code`, `status`, `duration_ms`), a `source` sub-object (`path`, `line_start`, `line_end`, `byte_start`, `byte_end`, `content_hash`), and `metadata`.
 
-#### Scenario: Claude Code and Codex events share one schema
-- **WHEN** a Claude Code session and a Codex session are both parsed
-- **THEN** both produce `SessionEvent` values of the same Go type, consumable by the same downstream filtering/evidence/handoff code without type switches
+#### Scenario: Claude Code, Codex, and Antigravity events share one schema
+- **WHEN** Claude Code, Codex, and Antigravity sessions are parsed
+- **THEN** all produce `SessionEvent` values of the same Go type, consumable by the same downstream filtering/evidence/handoff code without type switches
 
 ### Requirement: Deterministic, stable event IDs
 Event IDs SHALL be derived deterministically from stable identifying fields (session ID, provider, sequence, source location, event type) rather than randomly generated, so that re-parsing an unmodified session produces identical event IDs.
@@ -63,6 +63,17 @@ The system SHALL treat Antigravity as a first-class provider target alongside Cl
 #### Scenario: Antigravity is visible even before parsing ships
 - **WHEN** a user lists supported providers
 - **THEN** `antigravity` SHALL appear as a recognized provider target, and any unavailable local parsing support SHALL be reported as a clear implementation status rather than as an unknown provider
+
+### Requirement: Google Antigravity standalone app adapter
+The Antigravity adapter SHALL target Google's standalone Antigravity app local brain store, not the Antigravity IDE's VS Code-style storage. On Windows, the default root SHALL include `~/.gemini/antigravity/brain`, and sessions SHALL be discovered from `<conversation-id>/.system_generated/logs/transcript_full.jsonl` or `transcript.jsonl`, preferring `transcript_full.jsonl` when present.
+
+#### Scenario: Standalone brain session is parsed
+- **WHEN** an Antigravity standalone conversation exists under `~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/`
+- **THEN** `cc-session list --provider antigravity`, `inspect --provider antigravity`, `filter --provider antigravity`, `stats --provider antigravity`, and `handoff --provider antigravity` SHALL resolve that conversation and SHALL NOT read from the Antigravity IDE storage path
+
+#### Scenario: Antigravity step events normalize into shared events
+- **WHEN** an Antigravity transcript contains `USER_INPUT`, `PLANNER_RESPONSE`, tool-call entries, and tool execution result steps such as `RUN_COMMAND`, `VIEW_FILE`, `MCP_TOOL`, or `ERROR_MESSAGE`
+- **THEN** the adapter SHALL normalize them into the shared `SessionEvent` schema as user/assistant messages, tool calls, tool results, or noise while preserving source location and deterministic event IDs
 
 ### Requirement: Session discovery across platforms and overrides
 The system SHALL discover Claude Code, Codex, and Antigravity session roots by checking, in order: explicit config file entries, environment variable overrides (`CLAUDE_SESSION_ROOTS`, `CODEX_SESSION_ROOTS`, `ANTIGRAVITY_SESSION_ROOTS`), and common platform-default locations for Windows and Linux. If no sources can be found, the system SHALL return a clear, actionable error describing how to configure a root.

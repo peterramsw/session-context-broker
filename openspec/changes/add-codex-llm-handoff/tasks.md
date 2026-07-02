@@ -24,6 +24,13 @@
 - [x] 4.3 Implement graceful degradation (`event_type: "unknown"`, content preserved) for unrecognized Codex event shapes
 - [x] 4.4 Add tests: real-or-synthetic fixture parse, malformed event, unknown event, interrupted session
 
+## 4A. Antigravity standalone app adapter
+
+- [x] 4A.1 Verify the Google Antigravity standalone app session root and transcript format on this machine, distinct from Antigravity IDE storage (evidence: `artifacts/antigravity-standalone-smoke-test-2026-07-02.md`)
+- [x] 4A.2 Implement `internal/antigravitycodec` `Discover`/`Inspect`/`Parse` against `~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/{transcript_full.jsonl,transcript.jsonl}` (evidence: `artifacts/antigravity-standalone-smoke-test-2026-07-02.md`)
+- [x] 4A.3 Wire Antigravity into `list --provider`, `inspect`, `filter`, `stats`, and filtered-first `handoff` CLI paths (evidence: `artifacts/antigravity-standalone-smoke-test-2026-07-02.md`)
+- [x] 4A.4 Add tests for Antigravity fixture parsing, analyzer integration, malformed-line continuation, environment-root discovery, and CLI handoff filtered output (evidence: `artifacts/antigravity-standalone-smoke-test-2026-07-02.md`)
+
 ## 5. Deterministic filtering extension
 
 - [ ] 5.1 Extend `internal/summarizer`/`internal/analyzer` to guarantee retention of all listed risk/decision signals (errors, warnings, rollbacks, blockers, corrections, exit codes, git state, test summaries, final reports, subagent blockers)
@@ -95,6 +102,6 @@
 
 - [ ] 14.1 Run a full pipeline e2e test: fixture session → discover → inspect → parse → normalize → filter → redact → mock/local LLM distill → validate → write handoff → MCP `get_handoff` → `search_session` → `expand_evidence` → `verify_workspace`
 - [ ] 14.2 Add an opt-in live local LLM integration test that is skipped by default in `go test ./...`
-- [x] 14.3 Re-run real-session smoke tests (Claude Code, already partly validated in Phase 1) and attempt a real-or-synthetic Codex smoke test (evidence: `artifacts/provider-smoke-test-2026-07-02.md`, `artifacts/filtered-first-policy-smoke-test-2026-07-02.md`)
-- [x] 14.4 Confirm all upstream + new tests pass and `go build ./...` is clean (evidence: `artifacts/provider-smoke-test-2026-07-02.md`, `artifacts/filtered-first-policy-smoke-test-2026-07-02.md`)
+- [x] 14.3 Re-run real-session smoke tests (Claude Code, already partly validated in Phase 1) and attempt a real-or-synthetic Codex smoke test (evidence: `artifacts/provider-smoke-test-2026-07-02.md`, `artifacts/filtered-first-policy-smoke-test-2026-07-02.md`, `artifacts/antigravity-standalone-smoke-test-2026-07-02.md`)
+- [x] 14.4 Confirm all upstream + new tests pass and `go build ./...` is clean (evidence: `artifacts/provider-smoke-test-2026-07-02.md`, `artifacts/filtered-first-policy-smoke-test-2026-07-02.md`, `artifacts/antigravity-standalone-smoke-test-2026-07-02.md`)
 - [ ] 14.5 Compile the final report in the 16-section format the user specified, backing every claim with the actual command and its output

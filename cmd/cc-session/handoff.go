@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/analyzer"
+	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/antigravitycodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/codexcodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/config"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/distiller"
@@ -232,13 +233,47 @@ func resolveHandoffSession(prefix string, provider string, store parser.Store, r
 			return handoffInput{}, err
 		}
 	case providerAntigravity:
-		return handoffInput{}, fmt.Errorf("antigravity provider is recognized but session parsing is not implemented yet")
+		return resolveAntigravityHandoffSession(prefix)
 	case providerClaudeCode:
 		return resolveClaudeHandoffSession(prefix, store, reader)
 	default:
 		return handoffInput{}, fmt.Errorf("unknown provider %q", provider)
 	}
+	if provider == providerAuto {
+		if input, err := resolveAntigravityHandoffSession(prefix); err == nil {
+			return input, nil
+		}
+	}
 	return resolveClaudeHandoffSession(prefix, store, reader)
+}
+
+func resolveAntigravityHandoffSession(prefix string) (handoffInput, error) {
+	codec := antigravitycodec.Codec{}
+	ref, err := codec.Resolve(prefix)
+	if err != nil {
+		return handoffInput{}, err
+	}
+	events, err := codec.ReadAll(ref.Path)
+	if err != nil {
+		return handoffInput{}, err
+	}
+	meta, _ := codec.Inspect(ref)
+	stats := analyzer.ComputeStats(events)
+	workspace := meta.CWD
+	if workspace == "" {
+		workspace = ref.ProjectPath
+	}
+	return handoffInput{
+		info: handoff.SessionInfo{
+			Provider:      session.ProviderAntigravity,
+			SessionID:     ref.ID,
+			SourcePath:    ref.Path,
+			Workspace:     workspace,
+			RawChars:      stats.RawChars,
+			FilteredChars: stats.FilteredChars,
+		},
+		filteredText: stats.FilteredText,
+	}, nil
 }
 
 func resolveClaudeHandoffSession(prefix string, store parser.Store, reader session.TranscriptReader) (handoffInput, error) {

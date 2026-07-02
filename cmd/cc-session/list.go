@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/antigravitycodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/codexcodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/session"
@@ -38,12 +39,15 @@ func runList(args []string, out io.Writer, errOut io.Writer, store parser.Store)
 	case providerCodex:
 		return runCodexList(*limit, *project, out)
 	case providerAntigravity:
-		return fmt.Errorf("antigravity provider is recognized but session parsing is not implemented yet")
+		return runAntigravityList(*limit, *project, out)
 	case providerAll:
 		if err := runList(argsWithoutProvider(args), out, errOut, store); err != nil {
 			return err
 		}
-		return runCodexList(*limit, *project, out)
+		if err := runCodexList(*limit, *project, out); err != nil {
+			return err
+		}
+		return runAntigravityList(*limit, *project, out)
 	default:
 		return fmt.Errorf("unknown provider %q", *provider)
 	}
@@ -123,6 +127,39 @@ func runCodexList(limit int, project string, out io.Writer) error {
 		}
 		fmt.Fprintf(out, "%s  %s  %-20s  %3s  %-11s  %s\n",
 			ref.ID, dateStr, projectName, "", "[codex]", ref.FirstPrompt)
+		printed++
+	}
+	if printed == 0 {
+		fmt.Fprintln(out, "No sessions found.")
+	}
+	return nil
+}
+
+func runAntigravityList(limit int, project string, out io.Writer) error {
+	codec := antigravitycodec.Codec{}
+	refs, err := codec.Discover()
+	if err != nil {
+		return err
+	}
+	projectFilter := strings.ToLower(project)
+	printed := 0
+	for _, ref := range refs {
+		if printed >= limit {
+			break
+		}
+		projectName := "?"
+		if ref.ProjectPath != "" {
+			projectName = filepath.Base(ref.ProjectPath)
+		}
+		if projectFilter != "" && !strings.Contains(strings.ToLower(projectName), projectFilter) {
+			continue
+		}
+		dateStr := "??-??"
+		if ref.StartTime != "" {
+			dateStr = parser.FormatTimestamp(ref.StartTime)
+		}
+		fmt.Fprintf(out, "%s  %s  %-20s  %3s  %-11s  %s\n",
+			ref.ID, dateStr, projectName, "", "[antigravity]", ref.FirstPrompt)
 		printed++
 	}
 	if printed == 0 {

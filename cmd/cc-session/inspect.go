@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/analyzer"
+	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/antigravitycodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/codexcodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/session"
@@ -38,16 +39,57 @@ func runInspect(args []string, out io.Writer, errOut io.Writer, store parser.Sto
 			return err
 		}
 	case providerAntigravity:
-		return fmt.Errorf("antigravity provider is recognized but session parsing is not implemented yet")
+		codec := antigravitycodec.Codec{}
+		ref, err := codec.Resolve(fs.Arg(0))
+		if err != nil {
+			return err
+		}
+		return renderAntigravityInspect(out, codec, ref)
 	case providerClaudeCode:
 		return renderClaudeInspect(out, store, reader, fs.Arg(0))
 	default:
 		return fmt.Errorf("unknown provider %q", *provider)
 	}
+	if normalizeProvider(*provider) == providerAuto {
+		codec := antigravitycodec.Codec{}
+		ref, err := codec.Resolve(fs.Arg(0))
+		if err == nil {
+			return renderAntigravityInspect(out, codec, ref)
+		}
+	}
 	return renderClaudeInspect(out, store, reader, fs.Arg(0))
 }
 
 func renderCodexInspect(out io.Writer, codec codexcodec.Codec, ref session.SessionRef) error {
+	meta, err := codec.Inspect(ref)
+	if err != nil {
+		return err
+	}
+	events, err := codec.ReadAll(ref.Path)
+	if err != nil {
+		return err
+	}
+	stats := analyzer.ComputeStats(events)
+	fmt.Fprintf(out, "Provider: %s\n", ref.Provider)
+	fmt.Fprintf(out, "Session: %s\n", ref.ID)
+	fmt.Fprintf(out, "Path: %s\n", ref.Path)
+	fmt.Fprintf(out, "CWD: %s\n", meta.CWD)
+	fmt.Fprintf(out, "Started: %s\n", ref.StartTime)
+	fmt.Fprintf(out, "Messages: user=%d assistant=%d\n", meta.UserMessageCount, meta.AssistantMessageCount)
+	fmt.Fprintf(out, "Tools: calls=%d results=%d\n", meta.ToolCallCount, meta.ToolResultCount)
+	fmt.Fprintf(out, "Raw chars: %s\n", analyzer.FormatNumber(stats.RawChars))
+	fmt.Fprintf(out, "Filtered chars: %s\n", analyzer.FormatNumber(stats.FilteredChars))
+	if stats.RawChars > 0 {
+		saved := stats.RawChars - stats.FilteredChars
+		fmt.Fprintf(out, "Saved: %s (%.1f%%)\n", analyzer.FormatNumber(saved), float64(saved)*100/float64(stats.RawChars))
+	}
+	if len(meta.ParseErrors) > 0 {
+		fmt.Fprintf(out, "Parse errors: %d\n", len(meta.ParseErrors))
+	}
+	return nil
+}
+
+func renderAntigravityInspect(out io.Writer, codec antigravitycodec.Codec, ref session.SessionRef) error {
 	meta, err := codec.Inspect(ref)
 	if err != nil {
 		return err

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/analyzer"
+	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/antigravitycodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/codexcodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/session"
@@ -37,7 +38,12 @@ func runFilter(args []string, out io.Writer, errOut io.Writer, store parser.Stor
 			return err
 		}
 	case providerAntigravity:
-		return fmt.Errorf("antigravity provider is recognized but session parsing is not implemented yet")
+		codec := antigravitycodec.Codec{}
+		ref, err := codec.Resolve(fs.Arg(0))
+		if err != nil {
+			return err
+		}
+		return renderFiltered(out, ref.Path, codec)
 	case providerClaudeCode:
 		resolved, err := store.ResolveSession(fs.Arg(0))
 		if err != nil {
@@ -46,6 +52,13 @@ func runFilter(args []string, out io.Writer, errOut io.Writer, store parser.Stor
 		return renderFiltered(out, resolved.Path, reader)
 	default:
 		return fmt.Errorf("unknown provider %q", *provider)
+	}
+	if normalizeProvider(*provider) == providerAuto {
+		codec := antigravitycodec.Codec{}
+		ref, err := codec.Resolve(fs.Arg(0))
+		if err == nil {
+			return renderFiltered(out, ref.Path, codec)
+		}
 	}
 	resolved, err := store.ResolveSession(fs.Arg(0))
 	if err != nil {
