@@ -1,46 +1,24 @@
 # Architecture
 
-This fork keeps the upstream `cc-session` CLI and analyzer pipeline intact while
-adding provider-aware entry points for cross-agent session history.
+`cc-session` keeps deterministic filtering as the default path. Local LLM use is optional and only runs after the filtered transcript has already been produced and redacted.
 
-## CLI Entry
+## Layers
 
-`cmd/cc-session` is the executable surface. Claude Code remains the default
-provider for existing commands, so current `list`, `read`, `context`, `stats`,
-`audit`, `expand`, `inject`, and `benchmark` behavior stays compatible unless a
-provider flag is passed.
+- `cmd/cc-session`: CLI commands and stdio MCP entry point.
+- `internal/broker`: shared session operations used by CLI and MCP.
+- `internal/session`: provider-neutral session refs, metadata, normalized events, and legacy event model.
+- `internal/claudecodec`, `internal/codexcodec`, `internal/antigravitycodec`: provider adapters.
+- `internal/analyzer`: deterministic raw/filtered text and stats.
+- `internal/evidence`: manifest, normalized events, filtered artifact, evidence index, and bounded expansion.
+- `internal/distiller`: optional OpenAI-compatible Local LLM handoff generation.
+- `internal/handoff`: structured handoff schema, markdown rendering, and validation.
 
-Provider-aware commands currently implemented:
+## Data Flow
 
-- `list --provider claude_code|codex|all`
-- `inspect --provider auto|claude_code|codex`
-- `filter --provider auto|claude_code|codex`
-- `stats --provider claude_code|codex`
+1. Provider adapter discovers and parses a session.
+2. Analyzer produces deterministic filtered text.
+3. Redaction runs before filtered artifacts, Local LLM requests, and evidence expansion responses.
+4. Evidence store writes derived artifacts under `storage_root/<provider>/<session-id>/`.
+5. Optional Local LLM generates `handoff.json` and `handoff.md`; validator strips unknown evidence refs and demotes unsafe claims.
 
-`antigravity` is reserved as a first-class provider name. The CLI also accepts
-the user typo `angravity` as an alias, but the adapter intentionally fails with
-an actionable "not implemented" message until a real Antigravity session format
-is verified.
-
-## Core Packages
-
-- `internal/session`: shared legacy event model plus the new normalized provider
-  model (`SessionProvider`, `SessionRef`, `SessionMetadata`, `SessionEvent`).
-- `internal/claudecodec`: upstream Claude Code transcript parser.
-- `internal/codexcodec`: Codex rollout JSONL parser. It reads real Codex session
-  envelopes, normalizes them, and also maps them into the existing analyzer
-  event model so deterministic filtering and stats can run without a Local LLM.
-- `internal/analyzer`: deterministic raw/filtered text and category stats.
-- `internal/summarizer`: existing tool-result compaction used by the analyzer.
-- `internal/parser`: Claude Code session discovery and resolver.
-- `internal/formatter`, `internal/inject`, `internal/benchmark`, `internal/tokens`:
-  existing upstream behavior for rendering, injection, cost modeling, and token
-  counting.
-
-## Optional Local LLM Boundary
-
-The deterministic path has no Local LLM dependency. A user with only Codex
-sessions can run `list`, `inspect`, `filter`, and `stats -no-tokens` through the
-Codex adapter. Local LLM support is a later distillation layer for generated
-handoff artifacts, controlled by `local_llm.*` config, and must remain disabled
-unless explicitly configured.
+Raw session files are never mutated.

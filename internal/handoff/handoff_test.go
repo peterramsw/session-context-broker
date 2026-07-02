@@ -21,6 +21,21 @@ func TestNormalizeAndValidate_GivenUnknownEvidenceRef_ThenWarnsAndStrips(t *test
 	}
 }
 
+func TestNormalizeAndValidate_GivenUnevidencedPassedTestClaim_ThenDemotes(t *testing.T) {
+	h := Handoff{
+		Verification: VerificationState{
+			Passed: []EvidenceClaim{{Claim: "go test ./... passed"}},
+		},
+	}
+	got := NormalizeAndValidate(h, map[string]bool{"evi-good": true})
+	if len(got.Verification.Passed) != 0 {
+		t.Fatalf("Verification.Passed = %#v, want claim demoted", got.Verification.Passed)
+	}
+	if len(got.ClaimsRequiringReverification) != 1 || got.ClaimsRequiringReverification[0].Claim != "go test ./... passed" {
+		t.Fatalf("ClaimsRequiringReverification = %#v", got.ClaimsRequiringReverification)
+	}
+}
+
 func TestEvidenceClaim_UnmarshalString_ThenNormalizesToClaim(t *testing.T) {
 	var claims []EvidenceClaim
 	if err := json.Unmarshal([]byte(`["warning text"]`), &claims); err != nil {

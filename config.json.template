@@ -1,3 +1,31 @@
 {
-  "anthropic_api_key_file": "~/.config/anthropic/.env"
+  "anthropic_api_key_file": "~/.config/anthropic/.env",
+  "integration_test_session": "<optional-claude-session-id>",
+  "no_usage": false,
+  "session_sources": {
+    "claude_code": {
+      "roots": ["~/.claude/projects"]
+    },
+    "codex": {
+      "roots": ["~/.codex/sessions"]
+    },
+    "antigravity": {
+      "roots": ["~/.gemini/antigravity/brain"]
+    }
+  },
+  "storage_root": "~/.session-context",
+  "allowed_workspace_roots": ["~/work"],
+  "local_llm": {
+    "enabled": false,
+    "base_url": "http://127.0.0.1:8000/v1",
+    "api_key": "",
+    "model": "Qwen3.6-35B-A3B",
+    "max_context": 32000,
+    "max_output_tokens": 4096,
+    "timeout_seconds": 120,
+    "min_filtered_chars": 8000,
+    "temperature": 0,
+    "top_p": 0.95,
+    "top_k": 20
+  }
 }

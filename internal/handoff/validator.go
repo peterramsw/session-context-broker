@@ -6,13 +6,13 @@ func NormalizeAndValidate(h Handoff, evidence map[string]bool) Handoff {
 	if h.SchemaVersion == "" {
 		h.SchemaVersion = SchemaVersion
 	}
-	h.ConfirmedDecisions = cleanClaims(h.ConfirmedDecisions, "confirmed_decisions", evidence, &h)
+	h.ConfirmedDecisions = cleanClaimsWithPolicy(h.ConfirmedDecisions, "confirmed_decisions", evidence, &h, true)
 	h.RejectedOrSuperseded = cleanClaims(h.RejectedOrSuperseded, "rejected_or_superseded", evidence, &h)
-	h.KnownBlockers = cleanClaims(h.KnownBlockers, "known_blockers", evidence, &h)
-	h.UserCorrections = cleanClaims(h.UserCorrections, "user_corrections", evidence, &h)
-	h.Verification.Passed = cleanClaims(h.Verification.Passed, "verification.passed", evidence, &h)
-	h.Verification.Failed = cleanClaims(h.Verification.Failed, "verification.failed", evidence, &h)
-	h.Verification.Warnings = cleanClaims(h.Verification.Warnings, "verification.warnings", evidence, &h)
+	h.KnownBlockers = cleanClaimsWithPolicy(h.KnownBlockers, "known_blockers", evidence, &h, true)
+	h.UserCorrections = cleanClaimsWithPolicy(h.UserCorrections, "user_corrections", evidence, &h, true)
+	h.Verification.Passed = cleanClaimsWithPolicy(h.Verification.Passed, "verification.passed", evidence, &h, true)
+	h.Verification.Failed = cleanClaimsWithPolicy(h.Verification.Failed, "verification.failed", evidence, &h, true)
+	h.Verification.Warnings = cleanClaimsWithPolicy(h.Verification.Warnings, "verification.warnings", evidence, &h, true)
 	h.Verification.NotRun = cleanClaims(h.Verification.NotRun, "verification.not_run", evidence, &h)
 	h.Deployment.EvidenceRefs = cleanEvidenceRefs("deployment.evidence_refs", h.Deployment.EvidenceRefs, evidence, &h)
 	for i := range h.Deployment.Rollback {
@@ -23,6 +23,9 @@ func NormalizeAndValidate(h Handoff, evidence map[string]bool) Handoff {
 	}
 	if h.Deployment.Completed && len(h.Deployment.Rollback) > 0 {
 		h.Validation.Conflicts = append(h.Validation.Conflicts, TextItem("deployment.completed is true while rollback evidence is present"))
+	}
+	if h.ImplementationState.CurrentBranch != "" || h.ImplementationState.CurrentCommit != "" {
+		h.Validation.Warnings = append(h.Validation.Warnings, TextItem("implementation branch/commit state requires verify_workspace re-verification"))
 	}
 	h.ensureNonNilSlices()
 	return h
@@ -82,9 +85,18 @@ func nonNilTextItems(v []TextItem) []TextItem {
 }
 
 func cleanClaims(claims []EvidenceClaim, field string, evidence map[string]bool, h *Handoff) []EvidenceClaim {
+	return cleanClaimsWithPolicy(claims, field, evidence, h, false)
+}
+
+func cleanClaimsWithPolicy(claims []EvidenceClaim, field string, evidence map[string]bool, h *Handoff, requireEvidence bool) []EvidenceClaim {
 	out := make([]EvidenceClaim, 0, len(claims))
 	for _, claim := range claims {
 		claim.EvidenceRefs = cleanEvidenceRefs(field, claim.EvidenceRefs, evidence, h)
+		if requireEvidence && evidence != nil && len(claim.EvidenceRefs) == 0 && claim.Claim != "" {
+			h.ClaimsRequiringReverification = append(h.ClaimsRequiringReverification, claim)
+			h.Validation.Warnings = append(h.Validation.Warnings, TextItem(fmt.Sprintf("%s claim requires re-verification because it has no resolvable evidence", field)))
+			continue
+		}
 		out = append(out, claim)
 	}
 	return out

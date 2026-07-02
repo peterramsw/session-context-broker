@@ -149,6 +149,15 @@ func LoadSessionContextFromPath(path string) SessionContextConfig {
 		cfg.StorageRoot = "~/.session-context"
 	}
 	cfg.StorageRoot = expandHome(cfg.StorageRoot)
+	for name, source := range cfg.SessionSources {
+		for i, root := range source.Roots {
+			source.Roots[i] = expandHome(root)
+		}
+		cfg.SessionSources[name] = source
+	}
+	for i, root := range cfg.AllowedWorkspaceRoot {
+		cfg.AllowedWorkspaceRoot[i] = expandHome(root)
+	}
 	cfg.applySessionContextEnv()
 	return cfg
 }

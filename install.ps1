@@ -1,7 +1,8 @@
 #Requires -Version 5.1
 [CmdletBinding()]
 param(
-    [switch]$NoSkill
+    [switch]$NoSkill,
+    [string]$Clients = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -117,24 +118,68 @@ function Update-UserPath {
 # ── skill install ─────────────────────────────────────────────────────────────
 
 function Install-Skill {
-    if ($NoSkill) { return }
+    if ($NoSkill) { $script:Clients = "none" }
 
-    if ([Environment]::UserInteractive) {
-        $answer = Read-HostOrDefault -Prompt "Install Claude Code skill (cc-session)? [Y/n]" -Default "Y"
-        if ($answer -match '^[Nn]$') { return }
+    $selected = $Clients
+    if ([string]::IsNullOrWhiteSpace($selected)) {
+        if ([Environment]::UserInteractive) {
+            Write-Host "Select client integrations to install:"
+            Show-ClientStatus -Name "claude" -Path (Join-Path $HOME ".claude\skills\cc-session\SKILL.md")
+            Show-ClientStatus -Name "codex" -Path (Join-Path $HOME ".codex\skills\cc-session\SKILL.md")
+            Show-ClientStatus -Name "antigravity" -Path (Join-Path $HOME ".gemini\antigravity\skills\cc-session\SKILL.md")
+            $selected = Read-HostOrDefault -Prompt "Clients [claude] (all|none|claude,codex,antigravity)" -Default "claude"
+        } else {
+            $selected = "claude"
+        }
     }
+    if ($selected -eq "none") { return }
+    if ($selected -eq "all") { $selected = "claude,codex,antigravity" }
 
-    if (-not (Test-Path $SkillDir)) {
-        New-Item -ItemType Directory -Path $SkillDir | Out-Null
+    foreach ($client in ($selected -split ',')) {
+        switch ($client.Trim().ToLowerInvariant()) {
+            { $_ -in @("claude", "claude_code", "claude-code") } {
+                Install-ClientSkill -Source "claude-code" -Target (Join-Path $HOME ".claude\skills\cc-session") -Label "Claude Code"
+            }
+            "codex" {
+                Install-ClientSkill -Source "codex" -Target (Join-Path $HOME ".codex\skills\cc-session") -Label "Codex"
+            }
+            { $_ -in @("antigravity", "angravity") } {
+                Install-ClientSkill -Source "antigravity" -Target (Join-Path $HOME ".gemini\antigravity\skills\cc-session") -Label "Google Antigravity standalone app"
+            }
+            "" {}
+            default {
+                Write-Error "Unknown client: $client"
+                exit 1
+            }
+        }
     }
+}
 
-    $skillDst = Join-Path $SkillDir "SKILL.md"
-    Write-Host "Installing Claude Code skill to $skillDst..."
+function Show-ClientStatus {
+    param([string]$Name, [string]$Path)
+    if (Test-Path $Path) {
+        Write-Host "  [x] $Name"
+    } else {
+        Write-Host "  [ ] $Name"
+    }
+}
 
+function Install-ClientSkill {
+    param([string]$Source, [string]$Target, [string]$Label)
+    $base = "https://raw.githubusercontent.com/$Repo/main/skills"
+    $commonDir = Join-Path $Target "common"
+    if (-not (Test-Path $commonDir)) {
+        New-Item -ItemType Directory -Path $commonDir | Out-Null
+    }
+    Write-Host "Installing $Label skill to $Target..."
     try {
-        Invoke-WebRequest -Uri $SkillUrl -OutFile $skillDst -UseBasicParsing
-        Write-Host "Skill installed. Use /cc-session in Claude Code to activate it."
-    } catch {
+        Invoke-WebRequest -Uri "$base/$Source/cc-session/SKILL.md" -OutFile (Join-Path $Target "SKILL.md") -UseBasicParsing
+        Invoke-WebRequest -Uri "$base/common/resume-session.md" -OutFile (Join-Path $commonDir "resume-session.md") -UseBasicParsing
+        Invoke-WebRequest -Uri "$base/common/close-session.md" -OutFile (Join-Path $commonDir "close-session.md") -UseBasicParsing
+        Invoke-WebRequest -Uri "$base/common/review-history.md" -OutFile (Join-Path $commonDir "review-history.md") -UseBasicParsing
+        Write-Host "$Label integration installed."
+    }
+    catch {
         Write-Error "Failed to download skill: $_"
         exit 1
     }

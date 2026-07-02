@@ -56,6 +56,14 @@ func main() {
 		cmdFilter(os.Args[2:], reader)
 	case "handoff":
 		cmdHandoff(os.Args[2:], reader)
+	case "search":
+		cmdSearch(os.Args[2:], reader)
+	case "evidence":
+		cmdEvidence(os.Args[2:], reader)
+	case "verify-workspace":
+		cmdVerifyWorkspace(os.Args[2:], reader)
+	case "serve-mcp":
+		cmdServeMCP(os.Args[2:], reader)
 	case "read":
 		cmdRead(os.Args[2:], reader)
 	case "context":
@@ -87,6 +95,10 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  inspect   顯示 session metadata / stats")
 	fmt.Fprintln(os.Stderr, "  filter    輸出 deterministic filtered transcript")
 	fmt.Fprintln(os.Stderr, "  handoff   產生 Local LLM handoff artifact")
+	fmt.Fprintln(os.Stderr, "  search    搜尋 session evidence summaries")
+	fmt.Fprintln(os.Stderr, "  evidence  依 evidence ID 展開 redacted source bytes")
+	fmt.Fprintln(os.Stderr, "  verify-workspace  唯讀檢查允許 root 內的 git workspace")
+	fmt.Fprintln(os.Stderr, "  serve-mcp 啟動 stdio MCP server")
 	fmt.Fprintln(os.Stderr, "  read      完整對話 + tool call 一行摘要")
 	fmt.Fprintln(os.Stderr, "  context   精簡注入格式（帶 metadata header）")
 	fmt.Fprintln(os.Stderr, "  stats     字元與 token 分佈統計")

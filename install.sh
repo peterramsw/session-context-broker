@@ -6,15 +6,18 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 SKILL_DIR="$HOME/.claude/skills/cc-session"
 SKILL_URL="https://raw.githubusercontent.com/${REPO}/main/SKILL.md"
 SKIP_SKILL=0
+CLIENTS=""
 
 # ── arg parsing ──────────────────────────────────────────────────────────────
 
 for arg in "$@"; do
   case "$arg" in
-    --no-skill) SKIP_SKILL=1 ;;
+    --no-skill) SKIP_SKILL=1; CLIENTS="none" ;;
+    --clients=*) CLIENTS="${arg#--clients=}" ;;
     --help|-h)
-      echo "Usage: install.sh [--no-skill]"
+      echo "Usage: install.sh [--no-skill] [--clients all|none|claude,codex,antigravity]"
       echo "  --no-skill  Skip installing the Claude Code skill"
+      echo "  --clients   Select client integrations non-interactively"
       exit 0
       ;;
     *)
@@ -152,25 +155,80 @@ install_skill() {
     return
   fi
 
-  if is_tty; then
-    printf "Install Claude Code skill (cc-session)? [Y/n] "
-    read -r answer
-    if [[ "$answer" =~ ^[Nn]$ ]]; then
-      return
+  local selected="$CLIENTS"
+  if [ -z "$selected" ]; then
+    if is_tty; then
+      echo "Select client integrations to install:"
+      print_client_status "claude" "$HOME/.claude/skills/cc-session/SKILL.md"
+      print_client_status "codex" "$HOME/.codex/skills/cc-session/SKILL.md"
+      print_client_status "antigravity" "$HOME/.gemini/antigravity/skills/cc-session/SKILL.md"
+      printf "Clients [claude] (all|none|claude,codex,antigravity): "
+      read -r selected
+      selected="${selected:-claude}"
+    else
+      selected="claude"
     fi
   fi
+  case "$selected" in
+    none) return ;;
+    all) selected="claude,codex,antigravity" ;;
+  esac
 
-  mkdir -p "$SKILL_DIR"
+  IFS=',' read -r -a clients <<< "$selected"
+  for client in "${clients[@]}"; do
+    case "$(echo "$client" | tr '[:upper:]' '[:lower:]' | xargs)" in
+      claude|claude_code|claude-code)
+        install_client_skill "claude-code" "$HOME/.claude/skills/cc-session" "Claude Code"
+        ;;
+      codex)
+        install_client_skill "codex" "$HOME/.codex/skills/cc-session" "Codex"
+        ;;
+      antigravity|angravity)
+        install_client_skill "antigravity" "$HOME/.gemini/antigravity/skills/cc-session" "Google Antigravity standalone app"
+        ;;
+      "")
+        ;;
+      *)
+        echo "Unknown client: $client" >&2
+        exit 1
+        ;;
+    esac
+  done
+}
 
-  echo "Installing Claude Code skill to $SKILL_DIR/SKILL.md..."
-
-  if command -v curl &>/dev/null; then
-    curl -fsSL "$SKILL_URL" -o "$SKILL_DIR/SKILL.md"
+print_client_status() {
+  local name="$1"
+  local path="$2"
+  if [ -f "$path" ]; then
+    echo "  [x] $name"
   else
-    wget -qO "$SKILL_DIR/SKILL.md" "$SKILL_URL"
+    echo "  [ ] $name"
   fi
+}
 
-  echo "Skill installed. Use /cc-session in Claude Code to activate it."
+download_raw() {
+  local url="$1"
+  local dst="$2"
+  if command -v curl &>/dev/null; then
+    curl -fsSL "$url" -o "$dst"
+  else
+    wget -qO "$dst" "$url"
+  fi
+}
+
+install_client_skill() {
+  local source="$1"
+  local target="$2"
+  local label="$3"
+  local base="https://raw.githubusercontent.com/${REPO}/main/skills"
+  mkdir -p "$target/common"
+  echo "Installing $label skill to $target..."
+  download_raw "$base/$source/cc-session/SKILL.md" "$target/SKILL.md"
+  download_raw "$base/common/resume-session.md" "$target/common/resume-session.md"
+  download_raw "$base/common/close-session.md" "$target/common/close-session.md"
+  download_raw "$base/common/review-history.md" "$target/common/review-history.md"
+
+  echo "$label integration installed."
 }
 
 # ── main ──────────────────────────────────────────────────────────────────────

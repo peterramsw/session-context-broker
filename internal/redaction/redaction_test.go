@@ -34,3 +34,21 @@ func TestRedactSecrets_GivenBearerJWTAndPEM_ThenMasksThem(t *testing.T) {
 		t.Fatalf("sensitive content leaked in %q", got)
 	}
 }
+
+func TestRedactSecrets_GivenAWSAndHighEntropyNamedSecrets_ThenMasksThem(t *testing.T) {
+	input := strings.Join([]string{
+		"aws=AKIA1234567890ABCDEF",
+		"session_token=abcdefghijklmnopqrstuvwxyz1234567890",
+	}, "\n")
+	got := RedactSecrets(input)
+	for _, leaked := range []string{"AKIA1234567890ABCDEF", "abcdefghijklmnopqrstuvwxyz1234567890"} {
+		if strings.Contains(got, leaked) {
+			t.Fatalf("secret %q leaked in %q", leaked, got)
+		}
+	}
+	for _, want := range []string{"[REDACTED_AWS_KEY]", "[REDACTED_HIGH_ENTROPY_SECRET]"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("redacted output missing %q in %q", want, got)
+		}
+	}
+}

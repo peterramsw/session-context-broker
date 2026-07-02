@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,12 +11,11 @@ import (
 
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/analyzer"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/antigravitycodec"
+	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/broker"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/codexcodec"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/config"
-	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/distiller"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/handoff"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/parser"
-	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/redaction"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/session"
 )
 
@@ -60,77 +58,47 @@ func runHandoff(args []string, out io.Writer, errOut io.Writer, store parser.Sto
 		minFilteredChars = *minFilteredCharsFlag
 	}
 
-	input, err := resolveHandoffSession(fs.Arg(0), normalizeProvider(*provider), store, reader)
+	svc := broker.New(store, reader, cfg)
+	result, err := svc.CreateHandoff(context.Background(), fs.Arg(0), normalizeProvider(*provider), broker.HandoffOptions{
+		LLMMode:          string(llmMode),
+		MinFilteredChars: minFilteredChars,
+		Force:            *force,
+	})
 	if err != nil {
 		return err
 	}
-	logUsageAsync("handoff", session.ShortID(input.info.SessionID, 8))
-
-	redactedFiltered := redaction.RedactSecrets(input.filteredText)
-	filteredPath, err := handoff.WriteFilteredArtifact(cfg.StorageRoot, input.info, redactedFiltered, *force)
-	if err != nil {
-		return err
-	}
-	decision := decideLLMUse(llmMode, len(redactedFiltered), minFilteredChars, cfg.LocalLLM.IsEnabled())
-	if llmMode == llmModeAlways && !decision.UseLLM {
+	logUsageAsync("handoff", session.ShortID(result.SessionID, 8))
+	if llmMode == llmModeAlways && result.Mode != "llm" {
 		return fmt.Errorf("Local LLM is not enabled; configure local_llm.enabled=true with base_url/model, or use --llm auto/never for filtered-only output")
 	}
-	if !decision.UseLLM {
-		fmt.Fprintf(out, "Mode: filtered\n")
-		fmt.Fprintf(out, "Provider: %s\n", input.info.Provider)
-		fmt.Fprintf(out, "Session: %s\n", input.info.SessionID)
-		fmt.Fprintf(out, "LLM policy: %s\n", llmMode)
-		fmt.Fprintf(out, "LLM threshold: %d\n", minFilteredChars)
-		fmt.Fprintf(out, "LLM decision: %s\n", decision.Reason)
-		fmt.Fprintf(out, "Raw chars: %s\n", analyzer.FormatNumber(input.info.RawChars))
-		fmt.Fprintf(out, "Filtered chars: %s\n", analyzer.FormatNumber(input.info.FilteredChars))
-		fmt.Fprintf(out, "Redacted input chars: %s\n", analyzer.FormatNumber(len(redactedFiltered)))
-		fmt.Fprintf(out, "Filtered output: %s\n", filteredPath)
-		return nil
-	}
-
-	req := distiller.Request{
-		Config:             cfg.LocalLLM,
-		Session:            input.info,
-		FilteredTranscript: redactedFiltered,
-	}
-	generated, diag, err := distiller.Generate(context.Background(), req, distiller.NewClient(cfg.LocalLLM))
-	if err != nil {
-		var invalid distiller.InvalidOutputError
-		if errors.As(err, &invalid) && cfg.StorageRoot != "" {
-			if path, writeErr := handoff.WriteFailedRaw(cfg.StorageRoot, input.info.Provider, input.info.SessionID, invalid.Raw); writeErr == nil {
-				fmt.Fprintf(errOut, "raw failed Local LLM output written to %s\n", path)
-			}
-		}
-		return err
-	}
-	dir, err := handoff.WriteArtifacts(cfg.StorageRoot, generated, *force)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(out, "Mode: llm\n")
-	fmt.Fprintf(out, "Provider: %s\n", input.info.Provider)
-	fmt.Fprintf(out, "Session: %s\n", input.info.SessionID)
+	fmt.Fprintf(out, "Mode: %s\n", result.Mode)
+	fmt.Fprintf(out, "Provider: %s\n", result.Provider)
+	fmt.Fprintf(out, "Session: %s\n", result.SessionID)
 	fmt.Fprintf(out, "LLM policy: %s\n", llmMode)
-	fmt.Fprintf(out, "LLM threshold: %d\n", minFilteredChars)
-	fmt.Fprintf(out, "LLM decision: %s\n", decision.Reason)
-	fmt.Fprintf(out, "Model: %s\n", cfg.LocalLLM.Model)
-	fmt.Fprintf(out, "Max context: %d\n", cfg.LocalLLM.MaxContext)
-	fmt.Fprintf(out, "Max output tokens: %d\n", cfg.LocalLLM.MaxOutputTokens)
-	fmt.Fprintf(out, "Temperature: %g\n", localLLMTemperature(cfg.LocalLLM))
-	if cfg.LocalLLM.TopP != nil {
-		fmt.Fprintf(out, "TopP: %g\n", *cfg.LocalLLM.TopP)
+	fmt.Fprintf(out, "LLM threshold: %d\n", result.LLMThreshold)
+	fmt.Fprintf(out, "LLM decision: %s\n", result.LLMDecision)
+	if result.Mode == "llm" {
+		fmt.Fprintf(out, "Model: %s\n", result.Model)
+		fmt.Fprintf(out, "Max context: %d\n", result.MaxContext)
+		fmt.Fprintf(out, "Max output tokens: %d\n", result.MaxOutputTokens)
+		fmt.Fprintf(out, "Temperature: %g\n", result.Temperature)
+		if result.TopP != nil {
+			fmt.Fprintf(out, "TopP: %g\n", *result.TopP)
+		}
+		if result.TopK > 0 {
+			fmt.Fprintf(out, "TopK: %d\n", result.TopK)
+		}
+		fmt.Fprintf(out, "Chunks: %d\n", result.Diagnostics.Chunks)
+		fmt.Fprintf(out, "Repaired: %v\n", result.Diagnostics.Repaired)
 	}
-	if cfg.LocalLLM.TopK > 0 {
-		fmt.Fprintf(out, "TopK: %d\n", cfg.LocalLLM.TopK)
+	fmt.Fprintf(out, "Raw chars: %s\n", analyzer.FormatNumber(result.RawChars))
+	fmt.Fprintf(out, "Filtered chars: %s\n", analyzer.FormatNumber(result.FilteredChars))
+	fmt.Fprintf(out, "Redacted input chars: %s\n", analyzer.FormatNumber(result.RedactedInputChars))
+	fmt.Fprintf(out, "Filtered output: %s\n", result.FilteredPath)
+	fmt.Fprintf(out, "Evidence index: %s\n", result.EvidenceIndexPath)
+	if result.OutputDir != "" {
+		fmt.Fprintf(out, "Output: %s\n", result.OutputDir)
 	}
-	fmt.Fprintf(out, "Chunks: %d\n", diag.Chunks)
-	fmt.Fprintf(out, "Repaired: %v\n", diag.Repaired)
-	fmt.Fprintf(out, "Raw chars: %s\n", analyzer.FormatNumber(input.info.RawChars))
-	fmt.Fprintf(out, "Filtered chars: %s\n", analyzer.FormatNumber(input.info.FilteredChars))
-	fmt.Fprintf(out, "Redacted input chars: %s\n", analyzer.FormatNumber(diag.RedactedInputChars))
-	fmt.Fprintf(out, "Filtered output: %s\n", filteredPath)
-	fmt.Fprintf(out, "Output: %s\n", dir)
 	return nil
 }
 
