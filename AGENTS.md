@@ -1,6 +1,6 @@
 # Session Context Broker Agent Guide
 
-全新獨立專案，範疇/技術棧待補（使用者稍後會補充細節）。這份文件是本專案的最高規則文件，之後補充專案細節時請直接編輯本檔，不要另開一份取代它。
+Session context handoff CLI/MCP project for reading agent session logs, filtering noisy tool I/O, and producing compact context handoffs across supported coding agents. This file is the highest-level project rule file; keep it short and move detailed maps to separate docs once needed.
 
 ## Start Here
 
@@ -10,7 +10,12 @@
 
 ## Repo Entry Points
 
-TBD — populate once the source layout is decided (main module(s), key entry files, build/run instructions).
+- `cmd/cc-session/` — CLI commands for listing, inspecting, filtering, statistics, injection, audit, benchmark, and handoff generation.
+- `internal/session/` — provider abstraction and normalized session event model.
+- `internal/claudecodec/`, `internal/codexcodec/`, `internal/antigravitycodec/` — provider-specific session readers/codecs.
+- `internal/analyzer/`, `internal/formatter/`, `internal/handoff/` — deterministic filtering, rendering, and handoff artifact generation.
+- `internal/config/`, `internal/redaction/`, `internal/summarizer/` — configuration, secret redaction, and optional local LLM summarization support.
+- Build/test with `go test ./...` and `go build ./...`.
 
 ## OpenSpec Workflow
 
