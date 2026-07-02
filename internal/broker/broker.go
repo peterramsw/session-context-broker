@@ -85,6 +85,18 @@ func New(store parser.Store, reader session.TranscriptReader, cfg config.Session
 	if store.ProjectsDir == "" && store.SessionMetaDir == "" {
 		store = parser.DefaultStore()
 	}
+	// list_sessions falls back to scanning JSONL transcript headers when
+	// session-meta is sparse (the common case), which requires a HeaderScanner.
+	// The CLI injects one via DefaultStoreWith; the MCP/broker path did not, so
+	// list_sessions returned an empty result. Reuse the reader when it can scan
+	// headers, otherwise fall back to the claudecodec scanner.
+	if store.HeaderScanner == nil {
+		if hs, ok := reader.(session.HeaderScanner); ok {
+			store.HeaderScanner = hs
+		} else {
+			store.HeaderScanner = claudecodec.Codec{}
+		}
+	}
 	return Service{Store: store, Reader: reader, Config: cfg}
 }
 

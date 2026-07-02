@@ -217,7 +217,10 @@ func writeMCPMessage(w io.Writer, resp rpcResponse) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(w, "Content-Length: %d\r\n\r\n%s", len(data), data)
+	// MCP stdio transport frames each JSON-RPC message as a single line of JSON
+	// terminated by a newline (not LSP-style Content-Length headers). json.Marshal
+	// emits compact JSON with no embedded newlines, so one message == one line.
+	_, err = fmt.Fprintf(w, "%s\n", data)
 	return err
 }
 
