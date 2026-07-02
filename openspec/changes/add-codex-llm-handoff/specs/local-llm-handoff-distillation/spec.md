@@ -11,6 +11,21 @@ The distiller SHALL be disabled unless Local LLM handoff generation is explicitl
 - **WHEN** Local LLM handoff generation is enabled and `local_llm.api_key` is empty
 - **THEN** the distiller SHALL still make requests to `local_llm.base_url` successfully, omitting or emptying the auth header rather than failing
 
+### Requirement: Filtered-first Local LLM policy
+The system SHALL always compute and persist the deterministic filtered transcript before deciding whether to call the Local LLM. The automatic decision SHALL use the redacted filtered transcript size, not the raw session size, against a configurable `local_llm.min_filtered_chars` threshold. The default threshold SHALL skip short sessions and preserve filtered-only operation for users who do not configure a Local LLM.
+
+#### Scenario: Short session skips Local LLM automatically
+- **WHEN** `handoff --llm auto` is run for a session whose redacted filtered transcript is below `local_llm.min_filtered_chars`
+- **THEN** the system SHALL write `filtered.md` and SHALL NOT call the Local LLM endpoint
+
+#### Scenario: Large session can still work without a Local LLM
+- **WHEN** `handoff --llm auto` is run for a session above `local_llm.min_filtered_chars` but Local LLM is disabled or unconfigured
+- **THEN** the system SHALL still write `filtered.md`, SHALL report that Local LLM was skipped because it is unavailable, and SHALL NOT fail solely because the optional Local LLM is absent
+
+#### Scenario: Explicit Local LLM request fails loud
+- **WHEN** `handoff --llm always` is run and Local LLM is disabled or missing `base_url`/`model`
+- **THEN** the system SHALL write `filtered.md` first and then return an actionable Local LLM configuration error
+
 ### Requirement: Restricted distiller input
 The distiller's prompt SHALL consist only of the filtered transcript, evidence metadata, the handoff JSON schema, and explicit extraction rules. It SHALL NOT include the unfiltered raw session unless the caller explicitly enables a debug mode.
 

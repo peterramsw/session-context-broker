@@ -51,15 +51,15 @@ func TestRunHandoff_GivenClaudeSessionAndMockLocalLLM_ThenWritesArtifacts(t *tes
 		ProjectsDir:    filepath.Join(root, ".claude", "projects"),
 		SessionMetaDir: filepath.Join(root, ".claude", "usage-data", "session-meta"),
 	}
-	err := runHandoff([]string{"--provider", "claude_code", "--config", configPath, "--force", sid}, &stdout, &stderr, store, testReader)
+	err := runHandoff([]string{"--provider", "claude_code", "--config", configPath, "--llm", "always", "--force", sid}, &stdout, &stderr, store, testReader)
 	if err != nil {
 		t.Fatalf("runHandoff returned error: %v\nstderr=%s", err, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "Model: mock-model") || !strings.Contains(stdout.String(), "Output:") {
+	if !strings.Contains(stdout.String(), "Mode: llm") || !strings.Contains(stdout.String(), "Model: mock-model") || !strings.Contains(stdout.String(), "Output:") {
 		t.Fatalf("stdout missing handoff summary:\n%s", stdout.String())
 	}
 	outDir := filepath.Join(storageRoot, "claude_code", sid)
-	for _, name := range []string{"handoff.json", "handoff.md"} {
+	for _, name := range []string{"filtered.md", "handoff.json", "handoff.md"} {
 		if _, err := os.Stat(filepath.Join(outDir, name)); err != nil {
 			t.Fatalf("%s was not written: %v", name, err)
 		}
@@ -69,10 +69,11 @@ func TestRunHandoff_GivenClaudeSessionAndMockLocalLLM_ThenWritesArtifacts(t *tes
 	}
 }
 
-func TestRunHandoff_GivenNoLocalLLMConfig_ThenErrors(t *testing.T) {
+func TestRunHandoff_GivenSmallSessionAutoAndNoLocalLLMConfig_ThenWritesFilteredOnly(t *testing.T) {
 	root, sid := writeCLIFixture(t)
+	storageRoot := t.TempDir()
 	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(configPath, []byte(`{"storage_root":"`+filepath.ToSlash(t.TempDir())+`"}`), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte(`{"storage_root":"`+filepath.ToSlash(storageRoot)+`"}`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	var stdout, stderr bytes.Buffer
@@ -81,8 +82,39 @@ func TestRunHandoff_GivenNoLocalLLMConfig_ThenErrors(t *testing.T) {
 		SessionMetaDir: filepath.Join(root, ".claude", "usage-data", "session-meta"),
 	}
 	err := runHandoff([]string{"--provider", "claude_code", "--config", configPath, sid}, &stdout, &stderr, store, testReader)
+	if err != nil {
+		t.Fatalf("runHandoff returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "Mode: filtered") || !strings.Contains(got, "below threshold") {
+		t.Fatalf("stdout missing filtered-only decision:\n%s", got)
+	}
+	if _, err := os.Stat(filepath.Join(storageRoot, "claude_code", sid, "filtered.md")); err != nil {
+		t.Fatalf("filtered.md was not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(storageRoot, "claude_code", sid, "handoff.json")); err == nil {
+		t.Fatalf("handoff.json was written even though Local LLM was skipped")
+	}
+}
+
+func TestRunHandoff_GivenAlwaysLLMAndNoLocalLLMConfig_ThenErrorsAfterFilteredWrite(t *testing.T) {
+	root, sid := writeCLIFixture(t)
+	storageRoot := t.TempDir()
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"storage_root":"`+filepath.ToSlash(storageRoot)+`"}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	store := parser.Store{
+		ProjectsDir:    filepath.Join(root, ".claude", "projects"),
+		SessionMetaDir: filepath.Join(root, ".claude", "usage-data", "session-meta"),
+	}
+	err := runHandoff([]string{"--provider", "claude_code", "--config", configPath, "--llm", "always", sid}, &stdout, &stderr, store, testReader)
 	if err == nil || !strings.Contains(err.Error(), "Local LLM is not enabled") {
 		t.Fatalf("error = %v, want Local LLM config error", err)
+	}
+	if _, err := os.Stat(filepath.Join(storageRoot, "claude_code", sid, "filtered.md")); err != nil {
+		t.Fatalf("filtered.md was not written before Local LLM error: %v", err)
 	}
 }
 

@@ -94,6 +94,6 @@
 
 - [ ] 14.1 Run a full pipeline e2e test: fixture session → discover → inspect → parse → normalize → filter → redact → mock/local LLM distill → validate → write handoff → MCP `get_handoff` → `search_session` → `expand_evidence` → `verify_workspace`
 - [ ] 14.2 Add an opt-in live local LLM integration test that is skipped by default in `go test ./...`
-- [x] 14.3 Re-run real-session smoke tests (Claude Code, already partly validated in Phase 1) and attempt a real-or-synthetic Codex smoke test (evidence: `artifacts/provider-smoke-test-2026-07-02.md`)
-- [x] 14.4 Confirm all upstream + new tests pass and `go build ./...` is clean (evidence: `artifacts/provider-smoke-test-2026-07-02.md`)
+- [x] 14.3 Re-run real-session smoke tests (Claude Code, already partly validated in Phase 1) and attempt a real-or-synthetic Codex smoke test (evidence: `artifacts/provider-smoke-test-2026-07-02.md`, `artifacts/filtered-first-policy-smoke-test-2026-07-02.md`)
+- [x] 14.4 Confirm all upstream + new tests pass and `go build ./...` is clean (evidence: `artifacts/provider-smoke-test-2026-07-02.md`, `artifacts/filtered-first-policy-smoke-test-2026-07-02.md`)
 - [ ] 14.5 Compile the final report in the 16-section format the user specified, backing every claim with the actual command and its output

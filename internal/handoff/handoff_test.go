@@ -87,3 +87,33 @@ func TestWriteArtifacts_WritesJSONAndMarkdown(t *testing.T) {
 		t.Fatalf("WriteArtifacts without force overwrote existing output")
 	}
 }
+
+func TestWriteFilteredArtifact_WritesRedactedFilteredTranscript(t *testing.T) {
+	dir := t.TempDir()
+	info := SessionInfo{
+		Provider:      "codex",
+		SessionID:     "abc",
+		SourcePath:    "/tmp/session.jsonl",
+		Workspace:     "/tmp/proj",
+		RawChars:      100,
+		FilteredChars: 25,
+	}
+
+	path, err := WriteFilteredArtifact(dir, info, "hello [REDACTED_SECRET]\n", false)
+	if err != nil {
+		t.Fatalf("WriteFilteredArtifact returned error: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read filtered artifact: %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{"# Filtered Session", "Provider: codex", "Session: abc", "hello [REDACTED_SECRET]"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("filtered artifact missing %q:\n%s", want, text)
+		}
+	}
+	if _, err := WriteFilteredArtifact(dir, info, "again\n", false); err == nil {
+		t.Fatalf("WriteFilteredArtifact without force overwrote existing output")
+	}
+}

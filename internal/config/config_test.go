@@ -184,16 +184,17 @@ func TestLoadSessionContextFromPath_GivenLocalLLMConfig_ThenLoadsNewSchema(t *te
 	path := writeConfigFile(t, dir, map[string]any{
 		"storage_root": "~/.session-context-test",
 		"local_llm": map[string]any{
-			"enabled":           true,
-			"base_url":          "http://127.0.0.1:8080/v1",
-			"api_key":           "",
-			"model":             "local-model",
-			"max_context":       1234,
-			"max_output_tokens": 567,
-			"timeout_seconds":   9,
-			"temperature":       0,
-			"top_p":             0.95,
-			"top_k":             20,
+			"enabled":            true,
+			"base_url":           "http://127.0.0.1:8080/v1",
+			"api_key":            "",
+			"model":              "local-model",
+			"max_context":        1234,
+			"max_output_tokens":  567,
+			"timeout_seconds":    9,
+			"min_filtered_chars": 321,
+			"temperature":        0,
+			"top_p":              0.95,
+			"top_k":              20,
 		},
 	})
 
@@ -207,6 +208,9 @@ func TestLoadSessionContextFromPath_GivenLocalLLMConfig_ThenLoadsNewSchema(t *te
 	}
 	if cfg.LocalLLM.MaxContext != 1234 || cfg.LocalLLM.MaxOutputTokens != 567 || cfg.LocalLLM.TimeoutSeconds != 9 {
 		t.Fatalf("LocalLLM numeric config = %#v", cfg.LocalLLM)
+	}
+	if cfg.LocalLLM.MinFilteredCharsOrDefault() != 321 {
+		t.Fatalf("MinFilteredCharsOrDefault() = %d, want 321", cfg.LocalLLM.MinFilteredCharsOrDefault())
 	}
 	if cfg.LocalLLM.Temperature == nil || *cfg.LocalLLM.Temperature != 0 {
 		t.Fatalf("Temperature = %#v, want pointer to 0", cfg.LocalLLM.Temperature)
@@ -268,6 +272,7 @@ func TestLoadSessionContextFromPath_GivenEnvOverrides_ThenAppliesThem(t *testing
 	t.Setenv("LOCAL_LLM_BASE_URL", "http://new/v1")
 	t.Setenv("LOCAL_LLM_MODEL", "new-model")
 	t.Setenv("LOCAL_LLM_MAX_CONTEXT", "4321")
+	t.Setenv("LOCAL_LLM_MIN_FILTERED_CHARS", "8765")
 	t.Setenv("LOCAL_LLM_TEMPERATURE", "0")
 	t.Setenv("LOCAL_LLM_TOP_P", "0.9")
 	t.Setenv("LOCAL_LLM_TOP_K", "10")
@@ -283,11 +288,21 @@ func TestLoadSessionContextFromPath_GivenEnvOverrides_ThenAppliesThem(t *testing
 	if cfg.LocalLLM.MaxContext != 4321 {
 		t.Fatalf("MaxContext = %d, want 4321", cfg.LocalLLM.MaxContext)
 	}
+	if cfg.LocalLLM.MinFilteredCharsOrDefault() != 8765 {
+		t.Fatalf("MinFilteredCharsOrDefault() = %d, want 8765", cfg.LocalLLM.MinFilteredCharsOrDefault())
+	}
 	if cfg.LocalLLM.Temperature == nil || *cfg.LocalLLM.Temperature != 0 {
 		t.Fatalf("Temperature = %#v, want 0", cfg.LocalLLM.Temperature)
 	}
 	if cfg.LocalLLM.TopP == nil || *cfg.LocalLLM.TopP != 0.9 || cfg.LocalLLM.TopK != 10 {
 		t.Fatalf("sampling env overrides not applied: %#v", cfg.LocalLLM)
+	}
+}
+
+func TestLocalLLMConfig_GivenNoThreshold_ThenUsesDefaultMinFilteredChars(t *testing.T) {
+	cfg := LocalLLMConfig{}
+	if cfg.MinFilteredCharsOrDefault() != DefaultMinFilteredChars {
+		t.Fatalf("MinFilteredCharsOrDefault() = %d, want %d", cfg.MinFilteredCharsOrDefault(), DefaultMinFilteredChars)
 	}
 }
 

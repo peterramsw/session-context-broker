@@ -24,3 +24,11 @@ CLI subcommands SHALL call the same internal packages that back the MCP tools; c
 #### Scenario: Filter and search work offline
 - **WHEN** `local_llm.base_url` is unset
 - **THEN** `cc-session filter <session>` and `cc-session search <session> "<query>"` SHALL still succeed
+
+#### Scenario: Handoff auto mode falls back to filtered output
+- **WHEN** `cc-session handoff --llm auto <session>` is run without a configured Local LLM endpoint
+- **THEN** the command SHALL write the deterministic `filtered.md` artifact and SHALL NOT fail solely because Local LLM is unavailable
+
+#### Scenario: Handoff Local LLM mode is explicit
+- **WHEN** `cc-session handoff --llm always <session>` is run without a configured Local LLM endpoint
+- **THEN** the command SHALL return an actionable Local LLM configuration error after writing the filtered artifact

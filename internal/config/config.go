@@ -39,21 +39,31 @@ type SessionSourceConfig struct {
 	Roots []string `json:"roots"`
 }
 
+const DefaultMinFilteredChars = 8000
+
 type LocalLLMConfig struct {
-	Enabled         flexBool `json:"enabled"`
-	BaseURL         string   `json:"base_url"`
-	APIKey          string   `json:"api_key"`
-	Model           string   `json:"model"`
-	MaxContext      int      `json:"max_context"`
-	MaxOutputTokens int      `json:"max_output_tokens"`
-	TimeoutSeconds  int      `json:"timeout_seconds"`
-	Temperature     *float64 `json:"temperature"`
-	TopP            *float64 `json:"top_p"`
-	TopK            int      `json:"top_k"`
+	Enabled          flexBool `json:"enabled"`
+	BaseURL          string   `json:"base_url"`
+	APIKey           string   `json:"api_key"`
+	Model            string   `json:"model"`
+	MaxContext       int      `json:"max_context"`
+	MaxOutputTokens  int      `json:"max_output_tokens"`
+	TimeoutSeconds   int      `json:"timeout_seconds"`
+	MinFilteredChars int      `json:"min_filtered_chars"`
+	Temperature      *float64 `json:"temperature"`
+	TopP             *float64 `json:"top_p"`
+	TopK             int      `json:"top_k"`
 }
 
 func (c LocalLLMConfig) IsEnabled() bool {
 	return bool(c.Enabled) && c.BaseURL != "" && c.Model != ""
+}
+
+func (c LocalLLMConfig) MinFilteredCharsOrDefault() int {
+	if c.MinFilteredChars > 0 {
+		return c.MinFilteredChars
+	}
+	return DefaultMinFilteredChars
 }
 
 type SessionContextConfig struct {
@@ -174,6 +184,11 @@ func (c *SessionContextConfig) applySessionContextEnv() {
 	if v := os.Getenv("LOCAL_LLM_TIMEOUT_SECONDS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			c.LocalLLM.TimeoutSeconds = n
+		}
+	}
+	if v := os.Getenv("LOCAL_LLM_MIN_FILTERED_CHARS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.LocalLLM.MinFilteredChars = n
 		}
 	}
 	if v := os.Getenv("LOCAL_LLM_TEMPERATURE"); v != "" {
