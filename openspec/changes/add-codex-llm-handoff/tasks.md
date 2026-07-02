@@ -48,19 +48,19 @@
 
 ## 8. Handoff schema & validator
 
-- [ ] 8.1 Define the handoff Go structs + JSON schema in `internal/handoff/schema.go`
+- [x] 8.1 Define the handoff Go structs + JSON schema in `internal/handoff/schema.go` (evidence: `artifacts/local-llm-smoke-test-2026-07-02.md`)
 - [ ] 8.2 Implement `internal/handoff/validator.go`: evidence-ref existence checks, unevidenced-claim demotion to `claims_requiring_reverification`, deployment/rollback conflict detection, branch/commit mismatch warning
-- [ ] 8.3 Implement `internal/handoff/renderer.go` producing `handoff.md`, always including the required derived-artifact disclosure sentence verbatim
+- [x] 8.3 Implement `internal/handoff/renderer.go` producing `handoff.md`, always including the required derived-artifact disclosure sentence verbatim (evidence: `artifacts/local-llm-smoke-test-2026-07-02.md`)
 - [ ] 8.4 Add tests: hallucinated evidence ID rejected, deployment/rollback conflict flagged, unevidenced-claim warning generated, disclosure sentence present in every render
 
 ## 9. Local LLM distiller
 
-- [ ] 9.1 Implement `internal/distiller/openai_client.go`: configurable base_url/api_key/model/timeout (no hardcoding), empty-API-key support for unauthenticated local endpoints
+- [x] 9.1 Implement `internal/distiller/openai_client.go`: configurable base_url/api_key/model/timeout (no hardcoding), empty-API-key support for unauthenticated local endpoints (evidence: `artifacts/local-llm-smoke-test-2026-07-02.md`)
 - [ ] 9.2 Implement `internal/distiller/prompts.go`: input restricted to filtered transcript + evidence metadata + schema + extraction rules, with an explicit debug-mode gate before raw session content is ever included
 - [ ] 9.3 Implement `internal/distiller/chunker.go`: phase-heuristic segmentation (requirement/planning/design/implementation/debugging/testing/deployment/rollback/final-report) preserving event order when the transcript exceeds `local_llm.max_context`
 - [ ] 9.4 Implement `internal/distiller/merger.go`: merge per-chunk partial results, dropping (with a warning) any evidence ref not present in the evidence index
-- [ ] 9.5 Implement the one-repair-then-fail-loud flow, preserving the raw failed LLM output on disk when repair doesn't recover a valid schema
-- [ ] 9.6 Check whether existing `internal/tokens` is sufficient for the new token-estimate needs before adding any new tokenizer dependency
+- [x] 9.5 Implement the one-repair-then-fail-loud flow, preserving the raw failed LLM output on disk when repair doesn't recover a valid schema (evidence: `artifacts/local-llm-smoke-test-2026-07-02.md`)
+- [x] 9.6 Check whether existing `internal/tokens` is sufficient for the new token-estimate needs before adding any new tokenizer dependency (evidence: `artifacts/local-llm-smoke-test-2026-07-02.md`)
 - [ ] 9.7 Add tests against a mock OpenAI-compatible server: valid JSON, invalid JSON, successful repair, failed repair, timeout, endpoint-unavailable, schema-invalid output, hallucinated evidence ID, chunked distillation + merge correctness, deployment/rollback conflict, passed-test-missing-evidence warning
 
 ## 10. CLI commands

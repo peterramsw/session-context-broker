@@ -54,6 +54,8 @@ func main() {
 		cmdInspect(os.Args[2:], reader)
 	case "filter":
 		cmdFilter(os.Args[2:], reader)
+	case "handoff":
+		cmdHandoff(os.Args[2:], reader)
 	case "read":
 		cmdRead(os.Args[2:], reader)
 	case "context":
@@ -84,6 +86,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  list      列出最近的 session")
 	fmt.Fprintln(os.Stderr, "  inspect   顯示 session metadata / stats")
 	fmt.Fprintln(os.Stderr, "  filter    輸出 deterministic filtered transcript")
+	fmt.Fprintln(os.Stderr, "  handoff   產生 Local LLM handoff artifact")
 	fmt.Fprintln(os.Stderr, "  read      完整對話 + tool call 一行摘要")
 	fmt.Fprintln(os.Stderr, "  context   精簡注入格式（帶 metadata header）")
 	fmt.Fprintln(os.Stderr, "  stats     字元與 token 分佈統計")

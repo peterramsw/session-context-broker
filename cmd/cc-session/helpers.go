@@ -30,6 +30,7 @@ var reorderBoolFlags = map[string]bool{
 	"verbose-commands": true,
 	"no-tokens":        true,
 	"reset":            true,
+	"force":            true,
 }
 
 const (

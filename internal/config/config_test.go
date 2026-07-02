@@ -179,6 +179,118 @@ func TestLoadFromPath_GivenMissingConfigJSON_ThenReturnsZeroConfig(t *testing.T)
 	}
 }
 
+func TestLoadSessionContextFromPath_GivenLocalLLMConfig_ThenLoadsNewSchema(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfigFile(t, dir, map[string]any{
+		"storage_root": "~/.session-context-test",
+		"local_llm": map[string]any{
+			"enabled":           true,
+			"base_url":          "http://127.0.0.1:8080/v1",
+			"api_key":           "",
+			"model":             "local-model",
+			"max_context":       1234,
+			"max_output_tokens": 567,
+			"timeout_seconds":   9,
+			"temperature":       0,
+			"top_p":             0.95,
+			"top_k":             20,
+		},
+	})
+
+	cfg := LoadSessionContextFromPath(path)
+
+	if !cfg.LocalLLM.IsEnabled() {
+		t.Fatalf("LocalLLM.IsEnabled() = false, want true")
+	}
+	if cfg.LocalLLM.APIKey != "" {
+		t.Fatalf("LocalLLM.APIKey = %q, want empty", cfg.LocalLLM.APIKey)
+	}
+	if cfg.LocalLLM.MaxContext != 1234 || cfg.LocalLLM.MaxOutputTokens != 567 || cfg.LocalLLM.TimeoutSeconds != 9 {
+		t.Fatalf("LocalLLM numeric config = %#v", cfg.LocalLLM)
+	}
+	if cfg.LocalLLM.Temperature == nil || *cfg.LocalLLM.Temperature != 0 {
+		t.Fatalf("Temperature = %#v, want pointer to 0", cfg.LocalLLM.Temperature)
+	}
+	if cfg.LocalLLM.TopP == nil || *cfg.LocalLLM.TopP != 0.95 || cfg.LocalLLM.TopK != 20 {
+		t.Fatalf("sampling config = top_p:%#v top_k:%d", cfg.LocalLLM.TopP, cfg.LocalLLM.TopK)
+	}
+	if !filepath.IsAbs(cfg.StorageRoot) {
+		t.Fatalf("StorageRoot was not expanded to absolute path: %q", cfg.StorageRoot)
+	}
+}
+
+func TestLoadSessionContextFromPath_GivenLegacyQwenConfig_ThenMapsToLocalLLM(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfigFile(t, dir, map[string]any{
+		"qwen": map[string]any{
+			"base_url": "http://192.168.52.30:32080/v1",
+			"api_key":  "legacy-key",
+			"model":    "q36-35b-general/ornith",
+		},
+	})
+
+	cfg := LoadSessionContextFromPath(path)
+
+	if !cfg.LocalLLM.IsEnabled() {
+		t.Fatalf("legacy qwen config should enable LocalLLM: %#v", cfg.LocalLLM)
+	}
+	if cfg.LocalLLM.APIKey != "legacy-key" {
+		t.Fatalf("LocalLLM.APIKey = %q, want legacy-key", cfg.LocalLLM.APIKey)
+	}
+}
+
+func TestLoadSessionContextFromPath_GivenLocalLLMWithoutEnabled_ThenDisabled(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfigFile(t, dir, map[string]any{
+		"local_llm": map[string]any{
+			"base_url": "http://127.0.0.1:8080/v1",
+			"model":    "local-model",
+		},
+	})
+
+	cfg := LoadSessionContextFromPath(path)
+
+	if cfg.LocalLLM.IsEnabled() {
+		t.Fatalf("LocalLLM.IsEnabled() = true, want false unless enabled is explicit")
+	}
+}
+
+func TestLoadSessionContextFromPath_GivenEnvOverrides_ThenAppliesThem(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfigFile(t, dir, map[string]any{
+		"local_llm": map[string]any{
+			"enabled":  false,
+			"base_url": "http://old/v1",
+			"model":    "old",
+		},
+	})
+	t.Setenv("SESSION_CONTEXT_LOCAL_LLM_ENABLED", "yes")
+	t.Setenv("LOCAL_LLM_BASE_URL", "http://new/v1")
+	t.Setenv("LOCAL_LLM_MODEL", "new-model")
+	t.Setenv("LOCAL_LLM_MAX_CONTEXT", "4321")
+	t.Setenv("LOCAL_LLM_TEMPERATURE", "0")
+	t.Setenv("LOCAL_LLM_TOP_P", "0.9")
+	t.Setenv("LOCAL_LLM_TOP_K", "10")
+
+	cfg := LoadSessionContextFromPath(path)
+
+	if !cfg.LocalLLM.IsEnabled() {
+		t.Fatalf("LocalLLM.IsEnabled() = false, want env override enabled")
+	}
+	if cfg.LocalLLM.BaseURL != "http://new/v1" || cfg.LocalLLM.Model != "new-model" {
+		t.Fatalf("env overrides not applied: %#v", cfg.LocalLLM)
+	}
+	if cfg.LocalLLM.MaxContext != 4321 {
+		t.Fatalf("MaxContext = %d, want 4321", cfg.LocalLLM.MaxContext)
+	}
+	if cfg.LocalLLM.Temperature == nil || *cfg.LocalLLM.Temperature != 0 {
+		t.Fatalf("Temperature = %#v, want 0", cfg.LocalLLM.Temperature)
+	}
+	if cfg.LocalLLM.TopP == nil || *cfg.LocalLLM.TopP != 0.9 || cfg.LocalLLM.TopK != 10 {
+		t.Fatalf("sampling env overrides not applied: %#v", cfg.LocalLLM)
+	}
+}
+
 func TestGet_GivenReset_ThenReloadsConfig(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "first-key")
 	t.Setenv("CC_SESSION_NO_USAGE", "1")
