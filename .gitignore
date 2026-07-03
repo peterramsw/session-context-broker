@@ -21,3 +21,7 @@ config.json
 # local agent tooling (OpenSpec CLI commands/skills, per-machine, auto-generated)
 .claude/
 .agents/
+
+# personal agent-workflow governance docs (kept local, not part of the product)
+/AGENTS.md
+/CLAUDE.md
