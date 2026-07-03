@@ -25,3 +25,10 @@ The system SHALL add provider-aware support for `list`, `inspect`, `filter`, `st
 - **WHEN** `cc-session handoff --llm always <session>` is run without a configured Local LLM endpoint
 - **THEN** the command SHALL write `filtered.md` first and then return an actionable Local LLM configuration error
 
+### Requirement: Remaining CLI commands backed by shared core
+The system SHALL add `search`, evidence expansion, `verify-workspace`, and `serve-mcp` commands without breaking upstream `read`, `context`, `stats`, `audit`, `expand`, or `inject`.
+
+#### Scenario: Existing commands are unaffected
+- **WHEN** the upstream CLI test suite is run
+- **THEN** previously-passing tests SHALL still pass without expected-output changes
+
