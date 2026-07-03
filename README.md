@@ -1,88 +1,140 @@
 # session-context-broker
 
-> **A fork of [`Mapleeeeeeeeeee/cc-session-reader`](https://github.com/Mapleeeeeeeeeee/cc-session-reader)** (Apache-2.0).
-> Upstream is a deterministic **Claude Code** session reader that compresses transcripts so past sessions can be reused cheaply. This fork keeps that core intact and extends it into a cross-agent **session context broker**.
->
-> **What this fork adds on top of upstream:**
-> - **More session sources** — Codex CLI and Google Antigravity standalone-app sessions alongside Claude Code, behind one normalized provider adapter (upstream is Claude Code only).
-> - **Optional local-LLM handoff distillation** — distill a filtered transcript into a structured, evidence-referenced `handoff.json` via an OpenAI-compatible local endpoint. Optional by design: without a local LLM you still get filtered, evidence-backed artifacts.
-> - **Evidence store** — filtered output, evidence index, and handoff artifacts persisted under `storage_root`, with on-demand evidence expansion.
-> - **MCP server** — `cc-session serve-mcp` exposes the broker to Claude Code, Codex, and Antigravity as tools.
-> - **Cross-agent skills** — installable resume / close / review-history workflows.
->
-> Upstream CLI behavior (`list`, `read`, `context`, `inject`, `stats`, `expand`, `audit`) is preserved, and the project stays licensed under Apache-2.0.
+**繁體中文** ｜ [English](README.en.md)
 
-Local LLM handoff distillation is optional. Users without a Local LLM can still list, inspect, filter, search, and create filtered evidence-backed handoff artifacts.
+> **本專案 fork 自 [`Mapleeeeeeeeeee/cc-session-reader`](https://github.com/Mapleeeeeeeeeee/cc-session-reader)，授權延用上游的 Apache License 2.0。**
+> 上游是一個純靜態（不使用 LLM）的 **Claude Code** session 讀取工具，把 transcript 中的大量 tool 雜訊壓縮掉、保留對話，讓過去的 session 能用很少的 token 重新載入。本 fork 保留這個核心，並把它擴充成跨 agent 的 **session context broker**。
 
-## Install
+## 這個 fork 在上游之上加了什麼
 
-macOS / Linux:
+- **多來源 session**：除了 Claude Code，還支援 **Codex CLI** 與 **Google Antigravity 2.0** 的 session，全部收斂到同一套 normalized provider adapter（上游只支援 Claude Code）。
+- **可選的本地 LLM handoff 蒸餾**：透過 OpenAI-compatible 的本地 endpoint，把過濾後的 transcript 蒸餾成結構化、可回查證據的 `handoff.json`。**預設關閉**——沒有本地 LLM 的人一樣能用過濾與 evidence 功能。
+- **Evidence store**：過濾輸出、evidence 索引、handoff 產物都持久化在 `storage_root`，可依 evidence ID 按需展開。
+- **MCP server**：`cc-session serve-mcp` 把 broker 以工具形式開放給 Claude Code / Codex / Antigravity。
+- **跨 agent skills**：可安裝的 resume / close / review-history 工作流程。
+
+上游既有 CLI 行為（`list`、`read`、`context`、`inject`、`stats`、`expand`、`audit`）完整保留。
+
+## 機制（Pipeline）
+
+核心流程是「先靜態過濾，再選擇性交給本地 LLM」，原始 session 永遠不被修改：
+
+```
+原始 session（Claude Code / Codex / Antigravity）
+  → deterministic filter   ← 壓掉 tool 雜訊，保留對話與風險訊號（error/rollback/exit code…）
+  → secret redaction       ← 預設遮罩 API key、token、密碼等
+  → evidence index         ← 每個被壓縮的片段給一個可回查的 evidence_id
+  → [可選] 本地 LLM 蒸餾    ← 產出結構化 handoff.json（objective / decisions / next_actions…）
+  → schema + evidence 驗證  ← 沒有證據的聲明會被降級，不會被當成「已確認」
+  → MCP / Skill            ← 提供給新的 session 接手
+```
+
+兩個層次的價值要分清楚：
+
+- **靜態過濾（無 LLM）**：以 tool I/O 為主的 session 典型可壓縮 **80–88%**（純對話或大型 plan 文件較低）。這一層**沒有幻覺風險**，是省 token 的主力。
+- **本地 LLM 蒸餾（可選）**：不是為了再省 token，而是把長 session 整理成可導航的結構（目標、下一步、待重驗清單）。適合「接手工具活動密集的工程 session」。它是 **derived artifact，不是真相來源**；沒有證據的聲明一律降級到 `claims_requiring_reverification`。
+
+> 換句話說：省 token 靠過濾層就達成了；本地 LLM 是「導航」增益，需要時才開。
+
+## 安裝
+
+### 一鍵安裝
+
+安裝腳本會下載對應平台的 binary，並可同時安裝 Claude Code / Codex / Antigravity 的 skill。
+
+**macOS / Linux**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/peterramsw/session-context-broker/main/install.sh | bash -s -- --clients claude,codex,antigravity
 ```
 
-Windows PowerShell:
+**Windows PowerShell**
 
 ```powershell
 irm https://raw.githubusercontent.com/peterramsw/session-context-broker/main/install.ps1 | iex
 ```
 
-Non-interactive client selection:
+### 選擇要安裝哪些 client
+
+`--clients` 支援 `all`、`none`，或逗號分隔的 `claude,codex,antigravity`。互動模式會把「已安裝」的 client 打勾顯示。
 
 ```bash
-./install.sh --clients all
-./install.sh --clients none
-./install.sh --clients claude,codex
+./install.sh --clients all                    # 三個都裝
+./install.sh --clients claude                 # 只裝 Claude Code
+./install.sh --clients codex,antigravity      # 只裝 Codex + Antigravity
+./install.sh --no-skill                        # 只裝 binary，不裝任何 skill
 ```
 
 ```powershell
 .\install.ps1 -Clients all
-.\install.ps1 -Clients none
-.\install.ps1 -Clients claude,codex
+.\install.ps1 -Clients claude
+.\install.ps1 -Clients codex,antigravity
 ```
 
-Install prompts show already-installed client integrations as checked. No separate `cc-session init` is required.
+各 client 的 skill 安裝位置：
 
-## Commands
-
-| Command | Purpose |
+| Client | Skill 路徑 |
 |---|---|
-| `list` | List sessions by provider |
-| `inspect` | Show session metadata and stats |
-| `filter` | Print deterministic filtered transcript |
-| `handoff` | Write filtered/evidence artifacts and optional Local LLM handoff |
-| `search` | Search evidence summaries |
-| `evidence` | Expand one evidence ID with redaction by default |
-| `verify-workspace` | Read-only git verification inside allowed roots |
-| `serve-mcp` | Start stdio MCP server |
-| `read`, `context`, `stats`, `audit`, `expand`, `inject`, `benchmark` | Preserved upstream commands |
+| Claude Code | `~/.claude/skills/cc-session` |
+| Codex | `~/.codex/skills/cc-session` |
+| Google Antigravity 2.0 | `~/.gemini/antigravity/skills/cc-session` |
 
-Examples:
+### 其他安裝方式
+
+- **Releases**：從 [GitHub Releases](https://github.com/peterramsw/session-context-broker/releases) 下載對應平台壓縮檔，解壓後把 `cc-session` 放進 PATH。
+- **從原始碼建置**：`git clone` 後 `go build ./cmd/cc-session`。（注意：`go install` 目前會裝到**上游**版本，因為 module path 仍沿用上游 `github.com/Mapleeeeeeeeeee/cc-session-reader`。）
+
+## 使用
+
+### CLI 子命令
+
+| 命令 | 用途 |
+|---|---|
+| `list` | 依 provider 列出 session |
+| `inspect` | 顯示 session metadata 與統計 |
+| `filter` | 印出靜態過濾後的 transcript |
+| `handoff` | 寫出 filtered/evidence 產物，並可選擇性做本地 LLM handoff |
+| `search` | 搜尋 evidence 摘要 |
+| `evidence` | 依 evidence ID 展開（預設遮罩） |
+| `verify-workspace` | 在允許的 root 內做唯讀 git 檢查 |
+| `serve-mcp` | 啟動 stdio MCP server |
+| `read`、`context`、`stats`、`audit`、`expand`、`inject`、`benchmark` | 保留的上游命令 |
+
+範例：
 
 ```bash
 cc-session list --provider all -n 10
 cc-session filter --provider codex <session-id>
+
+# 沒有本地 LLM：只產出過濾 + evidence 產物
 cc-session handoff --provider antigravity --llm never <session-id>
-cc-session handoff --provider codex --llm auto --config ~/.session-context/config.json <session-id>
+
+# 有本地 LLM：達到門檻才蒸餾（auto），或強制蒸餾（always）
+cc-session handoff --provider codex --llm auto <session-id>
+
 cc-session serve-mcp --config ~/.session-context/config.json
 ```
 
-## Configuration
+### 接上 MCP
 
-Default path:
+任一支援 MCP 的 client 都是啟動同一個 stdio server：`cc-session serve-mcp`。以 Claude Code 的專案設定 `.mcp.json` 為例：
 
-```text
-~/.session-context/config.json
+```json
+{
+  "mcpServers": {
+    "cc-session": {
+      "command": "cc-session",
+      "args": ["serve-mcp"]
+    }
+  }
+}
 ```
 
-Override path:
+Codex 與 Antigravity 依各自的 MCP 設定格式指向同一個 `cc-session serve-mcp` 命令即可。提供的工具（`list_sessions`、`inspect_session`、`filter_session`、`create_handoff`、`get_handoff`、`search_session`、`expand_evidence`、`compare_context_size`、`verify_workspace`）見 [docs/mcp-tools.md](docs/mcp-tools.md)。
 
-```bash
-export SESSION_CONTEXT_CONFIG=/path/to/config.json
-```
+## 設定
 
-Example:
+預設路徑 `~/.session-context/config.json`，可用 `SESSION_CONTEXT_CONFIG` 覆蓋。**此檔為選擇性**——不設定時仍可 list/inspect/filter/search，只是不啟用本地 LLM。
 
 ```json
 {
@@ -92,7 +144,7 @@ Example:
     "antigravity": {"roots": ["~/.gemini/antigravity/brain"]}
   },
   "storage_root": "~/.session-context",
-  "allowed_workspace_roots": ["~/work", "D:/repo"],
+  "allowed_workspace_roots": ["~/work"],
   "local_llm": {
     "enabled": false,
     "base_url": "http://127.0.0.1:8000/v1",
@@ -109,41 +161,18 @@ Example:
 }
 ```
 
-Environment overrides include:
+環境變數可覆蓋設定，包含 `SESSION_CONTEXT_STORAGE_ROOT`、`SESSION_CONTEXT_LOCAL_LLM_ENABLED`、`LOCAL_LLM_BASE_URL`、`LOCAL_LLM_API_KEY`、`LOCAL_LLM_MODEL`、`LOCAL_LLM_MAX_CONTEXT`、`LOCAL_LLM_MAX_OUTPUT_TOKENS`、`LOCAL_LLM_TIMEOUT_SECONDS`、`LOCAL_LLM_MIN_FILTERED_CHARS`、`LOCAL_LLM_TEMPERATURE`、`LOCAL_LLM_TOP_P`、`LOCAL_LLM_TOP_K`。
 
-- `SESSION_CONTEXT_STORAGE_ROOT`
-- `SESSION_CONTEXT_LOCAL_LLM_ENABLED`
-- `LOCAL_LLM_BASE_URL`
-- `LOCAL_LLM_API_KEY`
-- `LOCAL_LLM_MODEL`
-- `LOCAL_LLM_MAX_CONTEXT`
-- `LOCAL_LLM_MAX_OUTPUT_TOKENS`
-- `LOCAL_LLM_TIMEOUT_SECONDS`
-- `LOCAL_LLM_MIN_FILTERED_CHARS`
-- `LOCAL_LLM_TEMPERATURE`
-- `LOCAL_LLM_TOP_P`
-- `LOCAL_LLM_TOP_K`
+## 產出 artifacts
 
-## Output Artifacts
+`cc-session handoff` 寫在 `storage_root/<provider>/<session-id>/` 下：
 
-`cc-session handoff` writes under:
+- `manifest.json`、`normalized.jsonl`、`filtered.jsonl`、`filtered.md`、`evidence-index.json`
+- `handoff.json` 與 `handoff.md`（僅在使用本地 LLM 時產生）
 
-```text
-storage_root/<provider>/<session-id>/
-```
+過濾產物與 evidence 展開預設遮罩敏感值；**原始 session 檔案永不修改**。
 
-Artifacts:
-
-- `manifest.json`
-- `normalized.jsonl`
-- `filtered.jsonl`
-- `filtered.md`
-- `evidence-index.json`
-- `handoff.json` and `handoff.md` when Local LLM is used
-
-Filtered artifacts and evidence expansion are redacted by default. Raw session files are never modified.
-
-## Documentation
+## 文件
 
 - [Architecture](docs/architecture.md)
 - [Session Providers](docs/session-provider.md)
@@ -154,3 +183,7 @@ Filtered artifacts and evidence expansion are redacted by default. Raw session f
 - [Skills](docs/skills.md)
 - [Security](docs/security.md)
 - [Upstream Sync](docs/upstream-sync.md)
+
+## 授權
+
+Apache License 2.0，**延用上游** `Mapleeeeeeeeeee/cc-session-reader`。`LICENSE` 檔維持不變；本 fork 新增的 Codex/Antigravity 支援、本地 LLM handoff、MCP 與 skills 同樣以 Apache-2.0 釋出。詳見 [LICENSE](LICENSE)。
