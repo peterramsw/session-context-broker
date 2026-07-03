@@ -93,6 +93,22 @@ fetch_latest_version() {
 TMPDIR_CLEANUP=""
 trap '[ -n "$TMPDIR_CLEANUP" ] && rm -rf "$TMPDIR_CLEANUP"' EXIT
 
+# stop_running_instances stops a cc-session running from the install path so the
+# upgraded binary is actually used — a running MCP server keeps serving the old
+# binary until it is restarted. Scoped strictly to INSTALL_DIR so unrelated
+# processes are never touched.
+stop_running_instances() {
+  command -v pgrep >/dev/null 2>&1 || return 0
+  local pids
+  pids=$(pgrep -f "$INSTALL_DIR/cc-session" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo "Stopping running cc-session so it reloads the new binary..."
+    # shellcheck disable=SC2086
+    kill $pids 2>/dev/null || true
+    sleep 1
+  fi
+}
+
 install_binary() {
   local version="$1"
   local platform="$2"
@@ -112,10 +128,12 @@ install_binary() {
   tar -xzf "$TMPDIR_CLEANUP/archive.tar.gz" -C "$TMPDIR_CLEANUP"
 
   mkdir -p "$INSTALL_DIR"
+  stop_running_instances
   mv "$TMPDIR_CLEANUP/cc-session" "$INSTALL_DIR/cc-session"
   chmod +x "$INSTALL_DIR/cc-session"
 
   echo "Installed cc-session to $INSTALL_DIR/cc-session"
+  echo "If an agent already had the MCP server open, restart Claude Code / Codex / Antigravity to load the new version."
 }
 
 # ── PATH check ────────────────────────────────────────────────────────────────

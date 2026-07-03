@@ -58,6 +58,21 @@ function Get-LatestVersion {
 
 # ── binary download & install ─────────────────────────────────────────────────
 
+# Stop a cc-session process running from the install path. On Windows a running
+# exe is locked, so an upgrade cannot overwrite it; and even where it could, the
+# already-running MCP server keeps serving the old binary until it is restarted.
+# Match strictly on the executable path so we never touch an unrelated process.
+function Stop-RunningInstances {
+    $exeDst = Join-Path $InstallDir "cc-session.exe"
+    $procs = @(Get-CimInstance Win32_Process -Filter "Name = 'cc-session.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $exeDst) })
+    foreach ($p in $procs) {
+        Write-Host "Stopping running cc-session (PID $($p.ProcessId)) so the binary can be replaced..."
+        Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    if ($procs.Count -gt 0) { Start-Sleep -Milliseconds 400 }
+}
+
 function Install-Binary {
     param([string]$Version, [string]$Arch)
 
@@ -81,9 +96,11 @@ function Install-Binary {
 
         $exeSrc = Join-Path $tmpDir "cc-session.exe"
         $exeDst = Join-Path $InstallDir "cc-session.exe"
+        Stop-RunningInstances
         Move-Item -Path $exeSrc -Destination $exeDst -Force
 
         Write-Host "Installed cc-session to $exeDst"
+        Write-Host "If an agent already had the MCP server open, restart Claude Code / Codex / Antigravity to load the new version."
     } finally {
         Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
