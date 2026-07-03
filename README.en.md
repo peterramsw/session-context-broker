@@ -45,6 +45,18 @@ Two layers of value, kept distinct:
 
 It operates across sessions (loading an old conversation cheaply into a new one), not on the conversation you're currently having — your current token usage is unaffected.
 
+### Good practice: after a long forced pause (e.g. hitting a 5-hour usage limit)
+
+**Running `cc-session handoff` in the same conversation thread does not help.** It's an external tool that reads the transcript file; it never writes back into the agent's live conversation context. The prompt cache TTL is only 5 minutes, so once a pause is longer than that, **continuing the original thread** will always re-cache-write the entire accumulated context on the first call — regardless of whether you ran `cc-session` beforehand.
+
+The savings only materialize if you treat the long pause as a boundary and **start a new conversation**:
+
+1. Before the pause (or right when the limit hits), run `cc-session handoff <session-id> --llm auto` to filter/distill the current session.
+2. Once the limit resets, **don't continue the original thread** — start a new conversation instead.
+3. In the new conversation, load the compressed result back in via `get_handoff` / `filter_session` (or just ask the agent to "resume the last session" and let Skill intent-matching handle it).
+
+The new conversation's starting context is the compressed version, not a re-read of the raw transcript — that's where the actual savings come from. **The trade-off is that you have to be willing to switch to a new conversation rather than seamlessly continuing the old one.**
+
 ## Install
 
 ### One-liner
