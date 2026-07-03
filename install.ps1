@@ -19,7 +19,7 @@ function Read-HostOrDefault {
     }
 }
 
-$Repo      = "Mapleeeeeeeeeee/cc-session-reader"
+$Repo      = "peterramsw/session-context-broker"
 $InstallDir = Join-Path $env:LOCALAPPDATA "cc-session"
 $SkillDir  = Join-Path $HOME ".claude\skills\cc-session"
 $SkillUrl  = "https://raw.githubusercontent.com/$Repo/main/SKILL.md"

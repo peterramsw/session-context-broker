@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="Mapleeeeeeeeeee/cc-session-reader"
+REPO="peterramsw/session-context-broker"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 SKILL_DIR="$HOME/.claude/skills/cc-session"
 SKILL_URL="https://raw.githubusercontent.com/${REPO}/main/SKILL.md"
