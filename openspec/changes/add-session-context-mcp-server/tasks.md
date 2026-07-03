@@ -7,11 +7,11 @@
 
 ## 2. MCP Server (official SDK)
 
-- [ ] 2.1 Adopt the official `modelcontextprotocol/go-sdk` as the MCP transport/runtime and remove the hand-rolled JSON-RPC loop in `serve_mcp.go` (the interim newline-delimited framing fix is a stopgap until this lands)
-- [ ] 2.2 Reimplement `cc-session serve-mcp` on the SDK, keeping `internal/broker` as the tool backend so CLI and MCP still share core logic
-- [ ] 2.3 Expose `list_sessions`, `inspect_session`, `filter_session`, `create_handoff`, `get_handoff`, `search_session`, `expand_evidence`, `compare_context_size`, and `verify_workspace` with **typed** input schemas (replace `additionalProperties: true`)
-- [ ] 2.4 Add an end-to-end test that drives the server as a real MCP client (initialize → tools/list → tools/call) over newline-delimited stdio and asserts parsed JSON-RPC responses — not substring matches on self-framed output
-- [ ] 2.5 Structure the transport layer so a future Streamable HTTP transport can be added without changing tool handlers
+- [x] 2.1 Adopt the official `modelcontextprotocol/go-sdk` (v1.6.1) as the MCP runtime and remove the hand-rolled JSON-RPC loop in `serve_mcp.go`; the interim framing fix is gone (SDK `StdioTransport` owns newline-delimited framing)
+- [x] 2.2 Reimplement `cc-session serve-mcp` on the SDK, keeping `internal/broker` as the tool backend so CLI and MCP still share core logic (handlers only marshal args → broker calls → text result)
+- [x] 2.3 Expose all nine tools with **typed** input schemas — the SDK infers each schema from a typed Go arg struct, so `additionalProperties: true` is gone and clients forward every declared argument
+- [x] 2.4 Add an end-to-end test that drives the server as a real MCP client (initialize → tools/list → tools/call) via the SDK in-memory transport pair, asserting parsed results — not substring matches on self-framed output; also verified over real stdio
+- [x] 2.5 Transport is swappable without touching handlers — tool handlers are transport-agnostic, so adding Streamable HTTP later is a one-line transport swap in `runServeMCP`
 
 ## 2b. Tool defects found in live MCP testing
 
