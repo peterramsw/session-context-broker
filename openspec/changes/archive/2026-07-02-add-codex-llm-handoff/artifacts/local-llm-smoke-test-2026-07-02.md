@@ -113,7 +113,7 @@ Output:
 ```text
 Provider: claude_code
 Session: 865e864d-0090-46b4-8363-45ebc5c5a19a
-Model: q36-35b-general/ornith
+Model: local-model
 Max context: 32000
 Max output tokens: 12000
 Temperature: 0
@@ -149,7 +149,7 @@ Output:
 ```text
 Provider: codex
 Session: 019f2314-d889-7223-ae56-787c4d2cb8c0
-Model: q36-35b-general/ornith
+Model: local-model
 Max context: 32000
 Max output tokens: 12000
 Temperature: 0
@@ -183,7 +183,7 @@ $j=Get-Content $p -Raw | ConvertFrom-Json
 Result:
 
 ```text
-schema=session-context-handoff/v1 provider=codex model=q36-35b-general/ornith objective_len=245 next_actions=4 workflow_candidates=3 warnings=3 conflicts=0
+schema=session-context-handoff/v1 provider=codex model=local-model objective_len=245 next_actions=4 workflow_candidates=3 warnings=3 conflicts=0
 ```
 
 Disclosure check:

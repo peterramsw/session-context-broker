@@ -26,3 +26,8 @@
 - [x] 4.2 Reject or strip hallucinated evidence IDs with warnings
 - [x] 4.3 Flag deployment/rollback and branch/commit conflicts
 - [x] 4.4 Add mock OpenAI-compatible tests for repair failure, schema-invalid output, hallucinated evidence, and chunked merge correctness
+
+## 5. Evidence grounding gap (found in live LLM testing)
+
+- [ ] 5.1 Feed the evidence index (evidence IDs + summaries) into the Local LLM distiller input so claims can cite real `evidence_refs`. Currently the distiller receives only the redacted filtered transcript, so a real `create_handoff --llm always` run (verified against the GB10 endpoint) produces a schema-valid handoff whose `evidence_refs` are all empty, which correctly but unhelpfully demotes every claim into `claims_requiring_reverification`. Evidence grounding — this change's core value — does not yet work end-to-end even though the store (3.x) and demotion (4.1) do.
+- [ ] 5.2 Fix demotion-warning wording: it emits `"<section> claim requires re-verification because it has no resolvable evidence"` for empty sections (e.g. seven `confirmed_decisions` warnings when `confirmed_decisions` is `[]`), which reads as a phantom defect instead of a demotion audit entry

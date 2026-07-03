@@ -19,13 +19,13 @@ Local LLM handoff distillation is optional. Users without a Local LLM can still 
 macOS / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/main/install.sh | bash -s -- --clients claude,codex,antigravity
+curl -fsSL https://raw.githubusercontent.com/peterramsw/session-context-broker/main/install.sh | bash -s -- --clients claude,codex,antigravity
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/Mapleeeeeeeeeee/cc-session-reader/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/peterramsw/session-context-broker/main/install.ps1 | iex
 ```
 
 Non-interactive client selection:

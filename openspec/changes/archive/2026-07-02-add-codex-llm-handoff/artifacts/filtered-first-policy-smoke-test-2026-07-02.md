@@ -75,7 +75,7 @@ Session: 019f2314-d889-7223-ae56-787c4d2cb8c0
 LLM policy: auto
 LLM threshold: 8000
 LLM decision: redacted filtered chars 73722 meets threshold 8000
-Model: q36-35b-general/ornith
+Model: local-model
 Max context: 32000
 Max output tokens: 12000
 Temperature: 0
@@ -95,7 +95,7 @@ Artifact inspection:
 ```text
 schema: session-context-handoff/v1
 provider: codex
-model: q36-35b-general/ornith
+model: local-model
 objective_len: 330
 next_actions: 5
 warnings: 4
