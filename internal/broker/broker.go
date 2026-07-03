@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/analyzer"
 	"github.com/Mapleeeeeeeeeee/cc-session-reader/internal/antigravitycodec"
@@ -119,6 +121,8 @@ func NormalizeProvider(provider string) string {
 
 func (s Service) List(provider, project string, limit int) ([]session.SessionRef, error) {
 	switch NormalizeProvider(provider) {
+	case ProviderAll, ProviderAuto:
+		return s.listAllProviders(project, limit)
 	case session.ProviderCodex:
 		return listProvider(codexcodec.Codec{Roots: s.sourceRoots(session.ProviderCodex)}, project, limit)
 	case session.ProviderAntigravity:
@@ -150,6 +154,41 @@ func (s Service) List(provider, project string, limit int) ([]session.SessionRef
 	default:
 		return nil, fmt.Errorf("unsupported provider for list: %s", provider)
 	}
+}
+
+// listAllProviders aggregates sessions across claude_code, codex, and
+// antigravity, newest first, applying limit to the combined result. A
+// provider that returns an error (e.g. no sessions found, roots not
+// configured) is skipped rather than failing the whole call, since "list
+// everything available" should degrade gracefully per provider.
+func (s Service) listAllProviders(project string, limit int) ([]session.SessionRef, error) {
+	var all []session.SessionRef
+	for _, provider := range []string{session.ProviderClaudeCode, session.ProviderCodex, session.ProviderAntigravity} {
+		refs, err := s.List(provider, project, 0)
+		if err != nil {
+			continue
+		}
+		all = append(all, refs...)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		return parseRefTime(all[i].StartTime).After(parseRefTime(all[j].StartTime))
+	})
+	if limit > 0 && len(all) > limit {
+		all = all[:limit]
+	}
+	return all, nil
+}
+
+func parseRefTime(value string) time.Time {
+	if value == "" {
+		return time.Time{}
+	}
+	for _, format := range []string{time.RFC3339Nano, time.RFC3339} {
+		if t, err := time.Parse(format, value); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
 }
 
 func listProvider(provider session.SessionProvider, project string, limit int) ([]session.SessionRef, error) {

@@ -6,6 +6,10 @@ bin/
 coverage.out
 dist/
 
+# stray local build output from `go build ./cmd/cc-session` at repo root
+/cc-session
+/cc-session.exe
+
 # local secrets / runtime config - never commit real credentials
 config.json
 *.local.json
