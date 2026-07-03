@@ -36,6 +36,15 @@ Two layers of value, kept distinct:
 
 > In short: token savings come from the filtering layer; the local LLM is a "navigation" enhancement you turn on when needed.
 
+### When does it actually run?
+
+**Nothing runs in the background and there is no timer.** Once installed, this tool does nothing on its own and has zero effect on your current conversation's token usage. It only runs when:
+
+- **Intent-triggered (default)** — the Skill's `description` lets Claude Code / Codex / Antigravity recognize when to reach for it. When you naturally say "continue from where we left off," "what did we do last time," or "wrap up this session," the agent decides to call `cc-session` on its own — you don't need to memorize any command.
+- **Manual** — you can also say it directly: "run `cc-session list`" or ask the agent to call a specific MCP tool.
+
+It operates across sessions (loading an old conversation cheaply into a new one), not on the conversation you're currently having — your current token usage is unaffected.
+
 ## Install
 
 ### One-liner
