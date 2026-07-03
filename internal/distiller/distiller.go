@@ -15,6 +15,10 @@ type Request struct {
 	Config             config.LocalLLMConfig
 	Session            handoff.SessionInfo
 	FilteredTranscript string
+	// EvidenceList is a compact rendering of the evidence index (evidence_id +
+	// summary per line) handed to the model so it can cite real evidence_refs.
+	// Without it the model has no IDs to cite and every claim is demoted.
+	EvidenceList string
 }
 
 type Diagnostics struct {
@@ -72,7 +76,7 @@ func Generate(ctx context.Context, req Request, client Client) (handoff.Handoff,
 }
 
 func generateChunk(ctx context.Context, req Request, client Client, chunk string, label string) (handoff.Handoff, int, bool, error) {
-	raw, err := client.Chat(ctx, BuildHandoffMessages(req.Session, chunk, label), req.Config.MaxOutputTokens)
+	raw, err := client.Chat(ctx, BuildHandoffMessages(req.Session, chunk, label, req.EvidenceList), req.Config.MaxOutputTokens)
 	if err != nil {
 		return handoff.Handoff{}, 0, false, err
 	}

@@ -269,8 +269,59 @@ func (s Service) resolveClaudeFiltered(prefix string) (FilteredSession, error) {
 		LegacyEvents: legacy,
 		FilteredText: stats.FilteredText,
 		Stats:        stats,
-		Metadata:     session.SessionMetadata{Ref: session.SessionRef{ID: resolved.ID, Provider: session.ProviderClaudeCode, Path: resolved.Path}},
+		Metadata:     buildClaudeMetadata(resolved.ID, resolved.Path, legacy),
 	}, nil
+}
+
+// buildClaudeMetadata derives counts for inspect_session from the parsed events,
+// so the Claude Code path reports real message/tool/line counts instead of zeros.
+func buildClaudeMetadata(id, path string, legacy []session.Event) session.SessionMetadata {
+	meta := session.SessionMetadata{
+		Ref:       session.SessionRef{ID: id, Provider: session.ProviderClaudeCode, Path: path},
+		CLI:       session.ProviderClaudeCode,
+		LineCount: len(legacy),
+	}
+	for _, e := range legacy {
+		switch e.Kind {
+		case session.EventUserMessage:
+			meta.UserMessageCount++
+		case session.EventAssistantMessage:
+			meta.AssistantMessageCount++
+			if e.Assistant != nil {
+				meta.ToolCallCount += len(e.Assistant.ToolUses)
+			}
+		case session.EventToolResult:
+			meta.ToolResultCount++
+		}
+	}
+	return meta
+}
+
+// renderEvidenceList produces a compact, bounded evidence listing for the local
+// LLM prompt so claims can cite real evidence_id values.
+func renderEvidenceList(idx evidence.Index) string {
+	const maxEntries = 120
+	const maxSummary = 140
+	var b strings.Builder
+	for i, e := range idx.Entries {
+		if i >= maxEntries {
+			fmt.Fprintf(&b, "... (%d more evidence items omitted)\n", len(idx.Entries)-maxEntries)
+			break
+		}
+		summary := strings.ReplaceAll(e.Summary, "\n", " ")
+		if r := []rune(summary); len(r) > maxSummary {
+			summary = string(r[:maxSummary]) + "…"
+		}
+		label := e.EventType
+		if e.ToolName != "" {
+			label += "/" + e.ToolName
+		}
+		if e.Status != "" {
+			label += " " + e.Status
+		}
+		fmt.Fprintf(&b, "%s [%s] %s\n", e.EvidenceID, label, summary)
+	}
+	return b.String()
 }
 
 func (s Service) sourceRoots(provider string) []string {
@@ -330,13 +381,19 @@ func (s Service) CreateHandoff(ctx context.Context, prefix, provider string, opt
 			EvidenceIndexPath:  wr.IndexPath,
 		}, nil
 	}
-	req := distiller.Request{Config: s.Config.LocalLLM, Session: filtered.Info, FilteredTranscript: redactedFiltered}
+	idx := evidence.BuildIndex(filtered.Info, filtered.Events)
+	req := distiller.Request{
+		Config:             s.Config.LocalLLM,
+		Session:            filtered.Info,
+		FilteredTranscript: redactedFiltered,
+		EvidenceList:       renderEvidenceList(idx),
+	}
 	generated, diag, err := distiller.Generate(ctx, req, distiller.NewClient(s.Config.LocalLLM))
 	if err != nil {
 		return HandoffResult{}, err
 	}
-	evidenceMap := map[string]bool{}
-	for _, entry := range evidence.BuildIndex(filtered.Info, filtered.Events).Entries {
+	evidenceMap := make(map[string]bool, len(idx.Entries))
+	for _, entry := range idx.Entries {
 		evidenceMap[entry.EvidenceID] = true
 	}
 	generated = handoff.NormalizeAndValidate(generated, evidenceMap)

@@ -137,16 +137,27 @@ func (s mcpServer) callTool(name string, args map[string]any) (any, error) {
 		})
 		return toolJSON(result), err
 	case "get_handoff":
-		path := evidencePath(s.cfg.StorageRoot, argString(args, "provider", ""), argString(args, "session_id", ""), "handoff.json")
-		data, err := os.ReadFile(path)
+		prov, sid, err := resolveStoredSession(s.cfg.StorageRoot, argString(args, "provider", ""), argString(args, "session_id", ""))
+		if err != nil {
+			return nil, err
+		}
+		name := "handoff.json"
+		if argString(args, "format", "json") == "markdown" {
+			name = "handoff.md"
+		}
+		data, err := os.ReadFile(evidencePath(s.cfg.StorageRoot, prov, sid, name))
 		return toolText(string(data)), err
 	case "search_session":
 		matches, err := s.svc.SearchSession(argString(args, "session_id", ""), argString(args, "provider", providerAuto), argString(args, "query", ""))
 		return toolJSON(matches), err
 	case "expand_evidence":
+		prov, sid, err := resolveStoredSession(s.cfg.StorageRoot, argString(args, "provider", ""), argString(args, "session_id", ""))
+		if err != nil {
+			return nil, err
+		}
 		result, err := evidence.Store{Root: s.cfg.StorageRoot}.Expand(evidence.ExpandOptions{
-			Provider:     argString(args, "provider", ""),
-			SessionID:    argString(args, "session_id", ""),
+			Provider:     prov,
+			SessionID:    sid,
 			EvidenceID:   argString(args, "evidence_id", ""),
 			AllowedRoots: allowedEvidenceRoots(s.cfg),
 			Limit:        argInt(args, "limit", 64*1024),
@@ -168,14 +179,38 @@ func (s mcpServer) callTool(name string, args map[string]any) (any, error) {
 }
 
 func mcpTools() []map[string]any {
-	names := []string{"list_sessions", "inspect_session", "filter_session", "create_handoff", "get_handoff", "search_session", "expand_evidence", "compare_context_size", "verify_workspace"}
-	tools := make([]map[string]any, 0, len(names))
-	for _, name := range names {
-		tools = append(tools, map[string]any{
-			"name":        name,
-			"description": "cc-session " + strings.ReplaceAll(name, "_", " "),
-			"inputSchema": map[string]any{"type": "object", "additionalProperties": true},
-		})
+	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
+	intp := func(desc string) map[string]any { return map[string]any{"type": "integer", "description": desc} }
+	boolp := func(desc string) map[string]any { return map[string]any{"type": "boolean", "description": desc} }
+	enum := func(desc string, values ...string) map[string]any {
+		return map[string]any{"type": "string", "enum": values, "description": desc}
+	}
+	provider := enum("session provider", "auto", "claude_code", "codex", "antigravity", "all")
+	sessionID := str("session id or unique prefix")
+
+	defs := []struct {
+		name     string
+		desc     string
+		props    map[string]any
+		required []string
+	}{
+		{"list_sessions", "List sessions for a provider", map[string]any{"provider": provider, "project": str("filter by project-name substring"), "limit": intp("max results (default 20)")}, nil},
+		{"inspect_session", "Show session metadata and message/tool counts", map[string]any{"session_id": sessionID, "provider": provider}, []string{"session_id"}},
+		{"filter_session", "Return the deterministic filtered transcript", map[string]any{"session_id": sessionID, "provider": provider}, []string{"session_id"}},
+		{"create_handoff", "Write filtered/evidence artifacts and optionally a local-LLM handoff", map[string]any{"session_id": sessionID, "provider": provider, "llm": enum("local LLM mode", "auto", "always", "never"), "min_filtered_chars": intp("override the --llm auto threshold"), "force": boolp("overwrite existing artifacts")}, []string{"session_id"}},
+		{"get_handoff", "Read a previously written handoff", map[string]any{"session_id": sessionID, "provider": provider, "format": enum("output format", "json", "markdown")}, []string{"session_id"}},
+		{"search_session", "Search evidence summaries", map[string]any{"session_id": sessionID, "provider": provider, "query": str("case-insensitive substring")}, []string{"session_id", "query"}},
+		{"expand_evidence", "Expand one evidence id to its source content", map[string]any{"session_id": sessionID, "provider": provider, "evidence_id": str("evidence id (evi-...)"), "limit": intp("max chars to read"), "unredacted": boolp("return unredacted content")}, []string{"session_id", "evidence_id"}},
+		{"compare_context_size", "Compare raw vs filtered character size", map[string]any{"session_id": sessionID, "provider": provider}, []string{"session_id"}},
+		{"verify_workspace", "Read-only git verification inside allowed_workspace_roots", map[string]any{"path": str("workspace path inside allowed_workspace_roots")}, []string{"path"}},
+	}
+	tools := make([]map[string]any, 0, len(defs))
+	for _, d := range defs {
+		schema := map[string]any{"type": "object", "properties": d.props}
+		if len(d.required) > 0 {
+			schema["required"] = d.required
+		}
+		tools = append(tools, map[string]any{"name": d.name, "description": d.desc, "inputSchema": schema})
 	}
 	return tools
 }
@@ -226,6 +261,34 @@ func writeMCPMessage(w io.Writer, resp rpcResponse) error {
 
 func evidencePath(root, provider, sessionID, name string) string {
 	return filepathJoin(root, safePathSegment(provider), safePathSegment(sessionID), name)
+}
+
+// resolveStoredSession maps a session-id prefix to the (provider, full session id)
+// of a persisted evidence-store directory, so get_handoff/expand_evidence accept
+// prefixes like the other tools instead of requiring the full session id.
+func resolveStoredSession(root, provider, prefix string) (string, string, error) {
+	if strings.TrimSpace(prefix) == "" {
+		return "", "", fmt.Errorf("session_id is required")
+	}
+	var providers []string
+	switch broker.NormalizeProvider(provider) {
+	case session.ProviderClaudeCode, session.ProviderCodex, session.ProviderAntigravity:
+		providers = []string{broker.NormalizeProvider(provider)}
+	default: // auto, all, or empty: search every provider
+		providers = []string{session.ProviderClaudeCode, session.ProviderCodex, session.ProviderAntigravity}
+	}
+	for _, prov := range providers {
+		entries, err := os.ReadDir(filepathJoin(root, safePathSegment(prov)))
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() && (e.Name() == prefix || strings.HasPrefix(e.Name(), prefix)) {
+				return prov, e.Name(), nil
+			}
+		}
+	}
+	return "", "", fmt.Errorf("no stored session matching %q (create a handoff first)", prefix)
 }
 
 func filepathJoin(parts ...string) string {

@@ -94,7 +94,7 @@ func cleanClaimsWithPolicy(claims []EvidenceClaim, field string, evidence map[st
 		claim.EvidenceRefs = cleanEvidenceRefs(field, claim.EvidenceRefs, evidence, h)
 		if requireEvidence && evidence != nil && len(claim.EvidenceRefs) == 0 && claim.Claim != "" {
 			h.ClaimsRequiringReverification = append(h.ClaimsRequiringReverification, claim)
-			h.Validation.Warnings = append(h.Validation.Warnings, TextItem(fmt.Sprintf("%s claim requires re-verification because it has no resolvable evidence", field)))
+			h.Validation.Warnings = append(h.Validation.Warnings, TextItem(fmt.Sprintf("a %s claim was moved to claims_requiring_reverification (no resolvable evidence)", field)))
 			continue
 		}
 		out = append(out, claim)

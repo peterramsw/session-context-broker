@@ -15,9 +15,9 @@
 
 ## 2b. Tool defects found in live MCP testing
 
-- [ ] 2b.1 `inspect_session` returns empty metadata (event/user/assistant/tool counts and line count all zero) because `ResolveFiltered` never populates `SessionMetadata`; populate it so inspect reports real counts
-- [ ] 2b.2 Resolve session-id prefixes consistently across every tool; `expand_evidence` uses the raw argument as a path segment, so an 8-char prefix builds a wrong evidence-store path instead of resolving to the full session id
-- [ ] 2b.3 `list_sessions` ignores the `limit` argument and always returns the default 20
+- [x] 2b.1 `inspect_session` returns empty metadata — fixed: `buildClaudeMetadata` now derives user/assistant/tool/result and line counts from parsed events (verified: 13/22/19/19/91)
+- [x] 2b.2 Resolve session-id prefixes consistently across every tool — fixed: `resolveStoredSession` maps a prefix to the persisted `<provider>/<full-id>` dir for `expand_evidence` and `get_handoff` (verified end-to-end with a prefix)
+- [x] 2b.3 `list_sessions` ignored the `limit` argument — root cause was the untyped `additionalProperties:true` schema so clients dropped it; fixed by giving every tool a typed input schema (this also satisfies the typed-schema intent of 2.3 on the current server)
 
 ## 3. Workspace Verification
 
