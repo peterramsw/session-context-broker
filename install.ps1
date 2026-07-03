@@ -159,9 +159,11 @@ function Install-Skill {
             }
             "codex" {
                 Install-ClientSkill -Source "codex" -Target (Join-Path $HOME ".codex\skills\cc-session") -Label "Codex"
+                Register-McpCodex
             }
             { $_ -in @("antigravity", "angravity") } {
                 Install-ClientSkill -Source "antigravity" -Target (Join-Path $HOME ".gemini\antigravity\skills\cc-session") -Label "Google Antigravity standalone app"
+                Register-McpAntigravity
             }
             "" {}
             default {
@@ -170,6 +172,62 @@ function Install-Skill {
             }
         }
     }
+}
+
+# register_mcp_* functions wire cc-session into each client's own MCP config so
+# a fresh install is actually usable as an MCP server, not just a skill. They
+# are idempotent (skip if an entry already exists) and never touch other
+# entries in the file.
+
+function Register-McpCodex {
+    $config = Join-Path $HOME ".codex\config.toml"
+    $dir = Split-Path $config -Parent
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if (-not (Test-Path $config)) { New-Item -ItemType File -Path $config -Force | Out-Null }
+
+    $content = Get-Content -Raw -Path $config -ErrorAction SilentlyContinue
+    if ($content -match '(?m)^\[mcp_servers\.cc-session\]') {
+        Write-Host "Codex MCP: cc-session already registered."
+        return
+    }
+
+    $exePath = Join-Path $InstallDir "cc-session.exe"
+    # TOML literal string (single quotes) so Windows backslashes need no escaping.
+    $block = @"
+
+[mcp_servers.cc-session]
+command = '$exePath'
+args = ["serve-mcp"]
+"@
+    Add-Content -Path $config -Value $block
+    Write-Host "Registered cc-session as a Codex MCP server in $config"
+}
+
+function Register-McpAntigravity {
+    $config = Join-Path $HOME ".gemini\antigravity\mcp_config.json"
+    $dir = Split-Path $config -Parent
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+
+    $data = $null
+    if (Test-Path $config) {
+        try {
+            $data = Get-Content -Raw -Path $config | ConvertFrom-Json -AsHashtable
+        } catch {
+            Write-Warning "$config is not valid JSON; skipping cc-session registration. Add it manually."
+            return
+        }
+    }
+    if (-not $data) { $data = @{} }
+    if (-not $data.ContainsKey('mcpServers')) { $data['mcpServers'] = @{} }
+    if ($data['mcpServers'].ContainsKey('cc-session')) {
+        Write-Host "Antigravity MCP: cc-session already registered."
+        return
+    }
+
+    $exePath = Join-Path $InstallDir "cc-session.exe"
+    $data['mcpServers']['cc-session'] = @{ command = $exePath; args = @("serve-mcp") }
+    ($data | ConvertTo-Json -Depth 10) | Set-Content -Path $config
+    Write-Host "Registered cc-session as an Antigravity MCP server in $config"
 }
 
 function Show-ClientStatus {

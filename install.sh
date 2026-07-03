@@ -200,9 +200,11 @@ install_skill() {
         ;;
       codex)
         install_client_skill "codex" "$HOME/.codex/skills/cc-session" "Codex"
+        register_mcp_codex
         ;;
       antigravity|angravity)
         install_client_skill "antigravity" "$HOME/.gemini/antigravity/skills/cc-session" "Google Antigravity standalone app"
+        register_mcp_antigravity
         ;;
       "")
         ;;
@@ -212,6 +214,61 @@ install_skill() {
         ;;
     esac
   done
+}
+
+# register_mcp_* functions wire cc-session into each client's own MCP config so
+# a fresh install is actually usable as an MCP server, not just a skill. They
+# are idempotent (skip if an entry already exists) and never touch other
+# entries in the file.
+
+register_mcp_codex() {
+  local config="$HOME/.codex/config.toml"
+  mkdir -p "$(dirname "$config")"
+  touch "$config"
+  if grep -q '^\[mcp_servers\.cc-session\]' "$config" 2>/dev/null; then
+    echo "Codex MCP: cc-session already registered."
+    return
+  fi
+  {
+    echo ""
+    echo "[mcp_servers.cc-session]"
+    echo "command = \"$INSTALL_DIR/cc-session\""
+    echo "args = [\"serve-mcp\"]"
+  } >> "$config"
+  echo "Registered cc-session as a Codex MCP server in $config"
+}
+
+register_mcp_antigravity() {
+  local config="$HOME/.gemini/antigravity/mcp_config.json"
+  mkdir -p "$(dirname "$config")"
+  if ! command -v python3 &>/dev/null; then
+    echo "Warning: python3 not found; add cc-session to $config manually:" >&2
+    echo "  \"cc-session\": {\"command\": \"$INSTALL_DIR/cc-session\", \"args\": [\"serve-mcp\"]}" >&2
+    return
+  fi
+  python3 - "$config" "$INSTALL_DIR/cc-session" <<'PYEOF'
+import json, sys
+
+path, cmd = sys.argv[1], sys.argv[2]
+try:
+    with open(path) as f:
+        content = f.read().strip()
+    data = json.loads(content) if content else {}
+except FileNotFoundError:
+    data = {}
+except json.JSONDecodeError:
+    print(f"Warning: {path} is not valid JSON; skipping cc-session registration. Add it manually.", file=sys.stderr)
+    sys.exit(0)
+
+servers = data.setdefault("mcpServers", {})
+if "cc-session" in servers:
+    print("Antigravity MCP: cc-session already registered.")
+else:
+    servers["cc-session"] = {"command": cmd, "args": ["serve-mcp"]}
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"Registered cc-session as an Antigravity MCP server in {path}")
+PYEOF
 }
 
 print_client_status() {
