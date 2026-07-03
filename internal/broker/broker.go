@@ -127,7 +127,7 @@ func (s Service) List(provider, project string, limit int) ([]session.SessionRef
 		store := s.claudeStore()
 		entries, warnings := store.ListAllSessions()
 		if len(warnings) > 0 {
-			return nil, fmt.Errorf(strings.Join(warnings, "; "))
+			return nil, fmt.Errorf("%s", strings.Join(warnings, "; "))
 		}
 		var refs []session.SessionRef
 		project = strings.ToLower(project)
