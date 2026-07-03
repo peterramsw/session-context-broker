@@ -17,3 +17,7 @@ config.json
 
 # local MCP install config (machine-specific absolute paths)
 .mcp.json
+
+# local agent tooling (OpenSpec CLI commands/skills, per-machine, auto-generated)
+.claude/
+.agents/
