@@ -62,7 +62,7 @@ function Install-Binary {
     param([string]$Version, [string]$Arch)
 
     $versionBare = $Version.TrimStart('v')
-    $zipName     = "cc-session-reader_${versionBare}_windows_${Arch}.zip"
+    $zipName     = "session-context-broker_${versionBare}_windows_${Arch}.zip"
     $downloadUrl = "https://github.com/$Repo/releases/download/$Version/$zipName"
     $tmpDir      = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
 

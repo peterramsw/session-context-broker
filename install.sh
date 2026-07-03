@@ -98,7 +98,7 @@ install_binary() {
   local platform="$2"
   local version_bare="${version#v}"
 
-  local download_url="https://github.com/${REPO}/releases/download/${version}/cc-session-reader_${version_bare}_${platform}.tar.gz"
+  local download_url="https://github.com/${REPO}/releases/download/${version}/session-context-broker_${version_bare}_${platform}.tar.gz"
   TMPDIR_CLEANUP=$(mktemp -d)
 
   echo "Downloading cc-session ${version} for ${platform}..."
