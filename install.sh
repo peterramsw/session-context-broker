@@ -132,7 +132,20 @@ install_binary() {
   mv "$TMPDIR_CLEANUP/cc-session" "$INSTALL_DIR/cc-session"
   chmod +x "$INSTALL_DIR/cc-session"
 
-  echo "Installed cc-session to $INSTALL_DIR/cc-session"
+  # Verify the swap actually took effect instead of trusting `mv`'s exit code
+  # alone — this is the safety net that catches a stale binary left in place
+  # by any failure mode upstream (e.g. a lock that mv silently won races with).
+  local installed_version
+  installed_version=$("$INSTALL_DIR/cc-session" --version 2>&1 || true)
+  case "$installed_version" in
+    *"$version_bare"*) ;;
+    *)
+      echo "Error: installed binary reports '$installed_version', expected version $version_bare. Install did not take effect — re-run the installer." >&2
+      exit 1
+      ;;
+  esac
+
+  echo "Installed cc-session ${version} to $INSTALL_DIR/cc-session"
   echo "If an agent already had the MCP server open, restart Claude Code / Codex / Antigravity to load the new version."
 }
 

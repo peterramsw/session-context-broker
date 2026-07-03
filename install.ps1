@@ -62,6 +62,8 @@ function Get-LatestVersion {
 # exe is locked, so an upgrade cannot overwrite it; and even where it could, the
 # already-running MCP server keeps serving the old binary until it is restarted.
 # Match strictly on the executable path so we never touch an unrelated process.
+# Returns once the file is actually unlocked (polls up to ~5s), since a killed
+# process does not always release its file handle immediately on Windows.
 function Stop-RunningInstances {
     $exeDst = Join-Path $InstallDir "cc-session.exe"
     $procs = @(Get-CimInstance Win32_Process -Filter "Name = 'cc-session.exe'" -ErrorAction SilentlyContinue |
@@ -70,7 +72,17 @@ function Stop-RunningInstances {
         Write-Host "Stopping running cc-session (PID $($p.ProcessId)) so the binary can be replaced..."
         Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
     }
-    if ($procs.Count -gt 0) { Start-Sleep -Milliseconds 400 }
+    if (-not (Test-Path $exeDst)) { return }
+    for ($i = 0; $i -lt 25; $i++) {
+        try {
+            $stream = [System.IO.File]::Open($exeDst, 'Open', 'ReadWrite', 'None')
+            $stream.Close()
+            return
+        } catch {
+            Start-Sleep -Milliseconds 200
+        }
+    }
+    Write-Warning "cc-session.exe still appears locked after waiting; the install may fail to replace it."
 }
 
 function Install-Binary {
@@ -87,20 +99,48 @@ function Install-Binary {
         New-Item -ItemType Directory -Path $tmpDir | Out-Null
         $zipPath = Join-Path $tmpDir $zipName
 
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath -UseBasicParsing
-        Expand-Archive -Path $zipPath -DestinationPath $tmpDir -Force
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
+        Expand-Archive -Path $zipPath -DestinationPath $tmpDir -Force -ErrorAction Stop
 
         if (-not (Test-Path $InstallDir)) {
-            New-Item -ItemType Directory -Path $InstallDir | Out-Null
+            New-Item -ItemType Directory -Path $InstallDir -ErrorAction Stop | Out-Null
         }
 
         $exeSrc = Join-Path $tmpDir "cc-session.exe"
         $exeDst = Join-Path $InstallDir "cc-session.exe"
+        if (-not (Test-Path $exeSrc)) {
+            throw "downloaded archive did not contain cc-session.exe"
+        }
         Stop-RunningInstances
-        Move-Item -Path $exeSrc -Destination $exeDst -Force
 
-        Write-Host "Installed cc-session to $exeDst"
+        # Move-Item can still hit a transient lock right after Stop-Process even
+        # after Stop-RunningInstances' own poll returns; retry briefly rather
+        # than letting one failure abort or (worse) silently leave the old binary.
+        $moved = $false
+        for ($i = 0; $i -lt 10 -and -not $moved; $i++) {
+            try {
+                Move-Item -Path $exeSrc -Destination $exeDst -Force -ErrorAction Stop
+                $moved = $true
+            } catch {
+                Start-Sleep -Milliseconds 300
+            }
+        }
+        if (-not $moved) {
+            throw "could not replace $exeDst (file still locked). Close any app using cc-session and re-run the installer."
+        }
+
+        # Verify the swap actually took effect instead of trusting Move-Item's
+        # reported success — this is what catches a silent installer failure.
+        $installedVersion = & $exeDst --version 2>&1
+        if ($LASTEXITCODE -ne 0 -or -not ($installedVersion -match [regex]::Escape($versionBare))) {
+            throw "installed binary reports '$installedVersion', expected version $versionBare. Install did not take effect — re-run the installer."
+        }
+
+        Write-Host "Installed cc-session $Version to $exeDst"
         Write-Host "If an agent already had the MCP server open, restart Claude Code / Codex / Antigravity to load the new version."
+    } catch {
+        Write-Error "cc-session install failed: $_"
+        exit 1
     } finally {
         Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
